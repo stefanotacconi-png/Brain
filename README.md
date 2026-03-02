@@ -1,1 +1,1 @@
-# cursor
+# claude
