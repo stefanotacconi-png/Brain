@@ -176,7 +176,7 @@ Analizza la nicchia specifica di {{companyName}} all'interno del settore immobil
 
 Seleziona il risultato Spoki più rilevante per il loro flusso operativo:
 
-• Franchising / rete multi-sede: "Abbiamo aiutato reti immobiliari come la vostra a rispondere ai lead di portale in meno di 60 secondi per ogni sede, automaticamente su WhatsApp."
+• Franchising / rete multi-sede: "Abbiamo aiutato reti come Tempocasa — 50+ sedi — a rispondere ai lead di portale in meno di 60 secondi per ogni ufficio, automaticamente su WhatsApp."
 
 • Agenzia residenziale / indipendente: "Abbiamo aiutato agenzie indipendenti a triplicare il tasso di risposta ai lead nel weekend senza assumere personale aggiuntivo, automatizzando WhatsApp."
 
@@ -184,7 +184,7 @@ Seleziona il risultato Spoki più rilevante per il loro flusso operativo:
 
 • Gestione affitti / property management: "Abbiamo aiutato team di property management a gestire richieste, rinnovi e manutenzioni su WhatsApp in automatico, liberando ore di lavoro manuale ogni settimana."
 
-• Immobiliare commerciale: "Abbiamo aiutato agenzie commerciali a non perdere trattative per follow-up lenti, automatizzando il primo contatto WhatsApp entro 60 secondi da ogni richiesta."
+• Immobiliare commerciale: "Abbiamo aiutato realtà come Reental a non perdere trattative per follow-up lenti, automatizzando il primo contatto WhatsApp entro 60 secondi da ogni richiesta."
 
 Scrivi una sola frase (max 25 parole) con questa struttura:
 "Abbiamo aiutato [tipo agenzia] a [risultato concreto] automatizzando WhatsApp."
@@ -217,6 +217,9 @@ Soluzioni disponibili:
 
 - Gestione inquilini (property management / affitti):
 "Spoki gestisce su WhatsApp le richieste ricorrenti degli inquilini — rinnovi, guasti, documenti. Il team smette di rispondere a mano e si concentra sulle trattative."
+
+- Immobiliare commerciale (uffici, capannoni, negozi, immobili aziendali):
+"Spoki manda un messaggio WhatsApp automatico a ogni richiesta di spazio commerciale entro 60 secondi. Il cliente riceve risposta prima di valutare alternative, senza che nessun agente debba essere disponibile."
 
 Step 2: Riscrivi la soluzione selezionata come una singola frase da inserire in una cold email. Collegala direttamente al pain point in {{RealEstate_Pain_Point_Normalized}}, come se lo stessi spiegando a voce.
 

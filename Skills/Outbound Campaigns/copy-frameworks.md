@@ -19,15 +19,15 @@ Used by `/cold-email-writer` to generate cold email sequences. Tailored for What
 
 | Industry | Pain Hook | WhatsApp Stat to Use | Best Framework |
 |----------|-----------|----------------------|----------------|
-| Beauty | No-shows, slow ad lead response | "Reduce no-shows 20–40%" | PAS |
-| Healthcare | Saturated phones, patients forget prep | "Automate 50%+ of calls" | PAS |
+| Beauty | No-shows, slow ad lead response | "Reduce no-shows up to 60%" | PAS |
+| Healthcare | Saturated phones, patients forget prep | "Automate 60–70% of queries" | PAS |
 | Real Estate | Portal leads go cold in minutes | "Reply before competitors do" | Insight-Lead |
 | Automotive | Slow portal follow-up, manual reminders | "Qualify leads instantly" | Insight-Lead |
 | Education | No-shows for open days, peak support overload | "Cut no-shows, automate FAQ" | PAS |
 | Travel/Hospitality | Drop-offs, missed pre-arrival upsell | "Recover bookings, sell upgrades" | Social Proof |
 | Fashion D2C | Cart abandonment, email fatigue | "WA recovers 10–30% better than email" | Insight-Lead |
 | Finance/Insurance | Renewal churn, KYC friction | "Automate renewal + doc collection" | PAS |
-| Events | Email reminders ignored | "90% open rate vs 20% on email" | Insight-Lead |
+| Events | Email reminders ignored | "98% open rate on WA vs 10% on email" | Insight-Lead |
 | Home / Furniture | Warm Meta leads go cold | "Instant WA reply → showroom booking" | PAS |
 
 ---
@@ -59,7 +59,7 @@ Worth a 15-min call to see if it applies?
 >
 > Running a clinic means a full calendar that never quite translates to full revenue — no-shows at €80–150 per slot add up fast.
 >
-> We help beauty clinics in Spain cut no-shows by 20–40% with automated WhatsApp reminders that patients actually respond to.
+> We help beauty clinics in Spain cut no-shows by up to 60% with automated WhatsApp reminders that patients actually respond to.
 >
 > Worth a 15-min call to see how it works?
 
@@ -70,7 +70,7 @@ Worth a 15-min call to see if it applies?
 >
 > Most private clinics we talk to have receptionists spending 3–4 hours a day on calls that could be automated.
 >
-> We help clinics automate 50%+ of appointment booking and reminder flows via WhatsApp — freeing your team for actual patient care.
+> We help clinics automate 60–70% of appointment booking and reminder flows via WhatsApp — freeing your team for actual patient care.
 >
 > Worth 15 mins?
 
@@ -116,14 +116,14 @@ Open to hearing how we did it with [similar company type]?
 >
 > We connect Idealista/Fotocasa leads directly to WhatsApp — automated reply in under 60 seconds, 24/7.
 >
-> Open to hearing how an agency in Madrid is using this?
+> Open to hearing how Reental is using this?
 
 **Fashion D2C example:**
 > Subject: Cart recovery via WhatsApp — 3x better than email
 >
 > Hi Sofia,
 >
-> Email cart abandonment sequences average 5–8% recovery. WhatsApp recovers 15–25% — same message, different channel.
+> Email cart abandonment sequences average 5–8% recovery. WhatsApp recovers 25–35% — same message, different channel.
 >
 > We set this up for D2C brands in 48 hours, no dev work required.
 >
@@ -271,9 +271,7 @@ la velocità di risposta è il fattore che incide di più sul fatturato per un'a
 
 {{Friction_Context_Personalized}}
 
-{{[Industry]_Social_Proof}}
-
-Dai un'occhiata qui: [case study / demo link]
+{{Social_Proof}}
 
 [Sender name]
 
@@ -288,16 +286,14 @@ la velocidad de respuesta es el factor que más impacta en la facturación de em
 
 {{Friction_Context_Personalized}}
 
-{{[Industry]_Social_Proof}}
-
-Échale un vistazo aquí: [case study / demo link]
+{{Social_Proof}}
 
 [Sender name]
 
 P.S. [WhatsApp agent demo link]
 ```
 
-**Formula:** Speed = revenue anchor → personalised friction context → social proof (named client result) → case study link → P.S.
+**Formula:** Speed = revenue anchor → personalised friction context → social proof (named client result) → P.S. only (no links in body — validated learning: links in E2 kill reply rate from 2.0% to 0.2%).
 
 ---
 
@@ -388,7 +384,7 @@ When uploading a lead list to Lemlist, populate these columns per lead:
 | `Pain_Point_Normalized` | Industry pain in 1–2 sentences, personalised | "le tue prenotazioni online non si convertono quanto vorresti" |
 | `Solution_Normalized` | One-line solution pitch | "aiutiamo le agenzie a rispondere ai lead entro 60 secondi via WhatsApp" |
 | `Friction_Context_Personalized` | Why they specifically feel this pain | "Con X sedi, ogni minuto di ritardo significa lead catturati dai competitor" |
-| `[Industry]_Social_Proof` | Named client result from same industry | "Tempocasa (50+ sedi) ha ridotto il tempo di risposta da 4h a 2 minuti" |
+| `Social_Proof` | Named client result from same industry — **generic column, no industry prefix** | RE franchising: "Tempocasa (50+ sedi) ha ridotto il tempo di risposta da 4h a 2 minuti" / RE commerciale: "Reental ha automatizzato il primo contatto WhatsApp entro 60 secondi" |
 | `[Industry]_Outcome_Metric_` | The killer stat for their industry | "le agenzie che rispondono entro 5 minuti chiudono il 78% delle trattative in più" |
 | `Value_Gift_Teaser` | What you're offering as the gift | "Ti lascio la nostra guida su come Tempocasa ha impostato il flusso" |
 | `cleanJobTitleIT` / `cleanJobTitleES` | Cleaned job title in language | "Direttore Marketing" / "Director de Marketing" |
@@ -409,8 +405,9 @@ When uploading a lead list to Lemlist, populate these columns per lead:
 | ES_Fashion | Spain | Fashion/Apparel | Running | — |
 | ES_Cold_Calls | Spain | Multi | Running | Phone cadence parallel |
 | IT_Cold_Calls | Italy | Multi | Running | Phone cadence parallel |
+| ITA_RealEstate | Italy | Real Estate | **In setup** | cam_XGHFWnDWroM6Reip9 — AI columns v3.0 pending rebuild in Lemlist UI; 2 test contacts added (Christian Biondo, Francesco Munizzi) |
 
-**Gaps to fill (high ICP, no active campaign):** ITA_Beauty, ITA_RealEstate, ES_Beauty, ES_RealEstate, ITA_Pet, ES_Pet
+**Gaps to fill (high ICP, no active campaign):** ITA_Beauty, ES_Beauty, ES_RealEstate, ITA_Pet, ES_Pet
 
 ---
 
@@ -495,7 +492,7 @@ Treat E4 as a priority email, not an afterthought. The graceful assumption of no
 
 ### Fashion campaigns need a different angle
 All 4 fashion campaigns (ITA, ES, UK, NL) underperform. Open rates are fine (26–51%).
-The pitch isn't landing. Test: lead with cart abandonment stat ("WhatsApp recovers 15–25% of carts vs 5% email") instead of generic WhatsApp automation.
+The pitch isn't landing. Test: lead with cart abandonment stat ("WhatsApp recovers 25–35% of carts vs 5% email") instead of generic WhatsApp automation.
 
 ### EN_Fashion_NL: 51.8% open / 0% reply — subjects are great, body is broken
 The NL audience opens but doesn't respond at all. Try: shorter body (2 sentences), direct question in Dutch, or completely different pain hook.
