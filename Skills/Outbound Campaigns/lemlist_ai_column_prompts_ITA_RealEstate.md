@@ -1,342 +1,330 @@
 # Lemlist AI Column Prompts — ITA_RealEstate
-**Version:** 2.0 — Rebuilt using PDF framework architecture + Apollo field mapping
+**Version:** 3.0 — Rebuilt on PDF framework (ITA_Retail architecture)
 **Updated:** 2026-03-03
 **Campaign:** ITA_RealEstate (cam_XGHFWnDWroM6Reip9)
-**Columns:** 8 total (ITA_Retail framework parity)
 
-Create each column in Lemlist → Campaign → Leads → "Create AI Columns" → "Create from scratch".
-Model and temperature are specified per column.
+Create columns in Lemlist → Leads → "Create AI Columns" → "AI Column" tab → "Create from scratch".
+**Create in order 1→8. Each column feeds the next.**
 
 ---
 
-## Execution order (columns must be created in this order — each feeds the next)
+## Column order & model
 
-| # | Column name | Model | Temp | Feeds into |
-|---|-------------|-------|------|-----------|
-| 1 | `cleanJobTitle` | GPT-4o | 0.3 | all copy columns |
-| 2 | `IT_RealEstate_Industry` | GPT-4o | 0.3 | Pain, Solution, Friction, Social Proof, Metric |
-| 3 | `RealEstate_Pain_Point_Normalized` | Haiku 4.5 | 0.5 | E1 body |
-| 4 | `Friction_Context_Personalized` | Haiku 4.5 | 0.5 | E2 body |
-| 5 | `RealEstate_Social_Proof` | GPT-4o | 0.3 | E2 body |
-| 6 | `IT_RealEstate_Solution_Normalized` | Haiku 4.5 | 0.5 | E1 body |
-| 7 | `RealEstate__Outcome_Metric_` | Haiku 4.5 | 0.5 | E3 body |
-| 8 | `IT_RealEstate_Subject_Line` | Haiku 4.5 | 0.5 | E1 subject |
+| # | Column name | Model | Temp |
+|---|-------------|-------|------|
+| 1 | `cleanJobTitle` | GPT-4o | 0.3 |
+| 2 | `IT_RealEstate_Industry` | GPT-4o | 0.3 |
+| 3 | `RealEstate_Pain_Point_Normalized` | Haiku 4.5 | 0.5 |
+| 4 | `Friction_Context_Personalized` | Haiku 4.5 | 0.5 |
+| 5 | `Social_Proof` | Haiku 4.5 | 0.5 |
+| 6 | `IT_RealEstate_Solution_Normalized` | Haiku 4.5 | 0.5 |
+| 7 | `RealEstate__Outcome_Metric_` | Haiku 4.5 | 0.5 |
+| 8 | `IT_RealEstate_Subject_Line` | Haiku 4.5 | 0.5 |
 
 ---
 
 ## Column 1: `cleanJobTitle`
-**Model:** GPT-4o | **Temperature:** 0.3
-**Purpose:** Normalised, natural-sounding job title for personalisation across all emails.
+**Model:** GPT-4o | **Temp:** 0.3
 
 ```
-You are processing a job title for use in a professional cold email. Your task is to clean and normalise the job title provided.
-
-Input job title: {{jobTitle}}
-Input language (if known): Italian or English
+You are a job title standardization assistant.
+Your task is to clean and standardize job titles while following these strict rules:
 
 Rules:
-1. PRESERVE the original language — never translate Italian to English or vice versa
-2. KEEP seniority if meaningful: C-level, VP, Director, Head of, Principal, Lead → keep as-is
-3. REMOVE: corporate suffixes (S.r.l., S.p.A., Ltd, Inc.), redundant words ("presso", "at", "di"), email addresses, URLs, numbers
-4. SHORTEN overly long titles to the core role (max 4–5 words)
-5. CAPITALISE correctly: Title Case for English, sentence case for Italian
-6. If the input is empty, clearly not a job title (e.g. a company name, email, or gibberish), return exactly: Responsabile
+- Language preservation is critical:
+  - Never translate the job title, always keep it in the original language
+  - When modifying or adding words, do it in the original language
+- Format case (latin characters only):
+  - Use title case (capitalize first letter of each word)
+  - Keep common acronyms/initialisms fully uppercase (CEO, CTO, VP, CFO, HR, IT, COO, CMO, etc)
+- Remove unnecessary seniority terms:
+  - Keep principal seniority terms: C-level, VP, Director, Head, Principal, Lead
+  - Remove other seniority indicators unless crucial for role clarity
+- Replace or remove decorative terms with professional equivalents
+- Remove unnecessary elements: emojis, special characters, company names, locations, years of experience, contract types
+- Handle multiple roles: keep only the most relevant or first role
+- Don't return anything for invalid or meaningless titles (e.g. "-----", "n/a", "?", " ")
 
 Examples:
-- "Digital Marketing Manager presso Agenzia Roma S.r.l." → "Digital Marketing Manager"
-- "CEO & Founder" → "CEO & Founder"
-- "responsabile vendite immobiliari" → "Responsabile vendite immobiliari"
-- "john.smith@company.com" → "Responsabile"
-- "" → "Responsabile"
+"Senior Software Engineer @ Google" → "Software Engineer"
+"CTO & Co-founder 🚀" → "CTO"
+"Head of HR - EMEA Region" → "Head of HR"
+"Presidente Amministratore Delegato & Co-Fondatore" → "CEO"
+"VP of Sales & Marketing | Team Lead" → "VP Sales"
 
-Return ONLY the cleaned job title. No explanation, no punctuation at the end.
+Always return just the cleaned title without any explanation or additional text.
+Never translate the job title, always return in the original language.
+If empty, meaningless, or invalid, do not return anything.
+
+Clean the following job title: {{jobTitle}}
 ```
 
 ---
 
 ## Column 2: `IT_RealEstate_Industry`
-**Model:** GPT-4o | **Temperature:** 0.3
-**Purpose:** Extracts what the agency concretely does in max 8 words — used in "Ho visto che vi occupate di ___" opener.
+**Model:** GPT-4o | **Temp:** 0.3
 
 ```
-You are processing company data to extract what a real estate company concretely does.
+Leggi questa descrizione aziendale da LinkedIn e rispondi con una sola cosa: che cosa fa concretamente questa agenzia immobiliare. Non il settore, non la missione, non la visione. L'attività per cui qualcuno paga.
 
-Company name: {{companyName}}
-Company description: {{companyDescriptionFromApollo}}
-Keywords: {{keywordsFromApollo}}
-Website: {{website}}
+La tua risposta deve funzionare in questa frase:
+"Ho visto che vi occupate di ___."
 
-STEP 1 — Identify which agency subcategory best fits:
-A. Agenzia immobiliare residenziale (residential sales/rentals)
-B. Agenzia immobiliare commerciale (commercial properties)
-C. Franchising immobiliare / rete di agenzie (franchise network, multi-location)
-D. Costruttore / developer immobiliare (property developer, new builds)
-E. Gestione affitti / property management (rental management, property management)
-F. Agenzia immobiliare generalista (generic, mixed)
+Esempi corretti:
+- "compravendita residenziale nella zona di Milano"
+- "affitti brevi e gestione proprietà in Toscana"
+- "immobili commerciali e uffici nel centro di Roma"
+- "nuove costruzioni residenziali in Veneto"
+- "franchising immobiliare con più sedi in Italia"
 
-STEP 2 — Write a short completion for "Ho visto che vi occupate di ___"
+Esempi sbagliati:
+- "soluzioni immobiliari innovative" (troppo vago, linguaggio da mission)
+- "aiutiamo i clienti a trovare casa" (non è un'offerta, è uno slogan)
+- "immobiliare" (troppo generico)
 
-Rules:
-- Max 8 words
-- Concrete and specific (e.g. "compravendita residenziale nella zona di Milano" not "immobiliare")
-- Italian only
-- No "agenzia", no "immobiliare" as standalone — be more specific
-- If description is empty or unclear, default to "compravendita e affitti immobiliari"
+Regole:
+- Una frase sola, massimo 8 parole
+- Niente punti finali, elenchi o spiegazioni
+- Ignora tutto il linguaggio di visione, filosofia e advocacy
+- In italiano
 
-Return ONLY the completion phrase (the part after "vi occupate di"). No explanation.
+Descrizione azienda:
+{{companyDescriptionFromApollo}}
 ```
 
 ---
 
 ## Column 3: `RealEstate_Pain_Point_Normalized`
-**Model:** Haiku 4.5 | **Temperature:** 0.5
-**Purpose:** 1–2 sentence pain point for Email 1 body — Insight-Lead framework opener.
+**Model:** Haiku 4.5 | **Temp:** 0.5
 
 ```
-You are a cold email copywriter for Spoki, a WhatsApp automation platform for real estate agencies in Italy.
+Step 1: Leggi {{companyDescriptionFromApollo}} e {{IT_RealEstate_Industry}} e identifica in massimo 3 parole la sottocategoria dell'agenzia (es. "agenzia residenziale", "rete franchising", "developer nuova costruzione", "gestione affitti", "immobiliare commerciale"). Chiamala [tipo].
 
-Lead context:
-- Company: {{companyName}}
-- Job title: {{cleanJobTitle}}
-- Agency type: {{IT_RealEstate_Industry}}
-- Company description: {{companyDescriptionFromApollo}}
-- Technologies used: {{technologiesFromApollo}}
+Step 2: In base a {{companyDescriptionFromApollo}}, {{cleanJobTitle}}, {{technologiesFromApollo}} e il settore Immobiliare, seleziona la categoria e l'opzione (A o B) più rilevante.
 
-STEP 1 — Identify which pain profile best fits this agency:
+Categorie:
 
-A. COMPETITOR TOOL USER — if {{technologiesFromApollo}} mentions Charles, ManyChat, Zendesk, Twilio, or Respond.io
-   Pre-written options (pick one):
-   - "Parlando con altri {{cleanJobTitle}} nel settore, una cosa che sento spesso è che cambiare strumento per il WhatsApp fa paura — ma rimanere su [tool] significa continuare a pagare per qualcosa che non risponde ai lead di portale in automatico."
-   - "Una cosa che noto spesso in agenzie che usano [tool]: il sistema c'è, ma i lead di Immobiliare.it e Casa.it aspettano ancora una risposta manuale."
+- Agenzia residenziale / indipendente (agenzia singola, piccolo team, compravendita casa):
+  A) "Parlando con altri {{cleanJobTitle}}, il tema che esce sempre sono i lead di Immobiliare.it e Casa.it che arrivano fuori orario e il giorno dopo hanno già chiamato un'altra agenzia."
+  B) "Una cosa che vedo spesso in immobiliare: i lead dai portali arrivano la sera, il weekend, nei festivi — quando nessuno risponde — e lunedì mattina sono già andati altrove."
 
-B. FRANCHISE / MULTI-LOCATION — if {{IT_RealEstate_Industry}} or {{companyDescriptionFromApollo}} mentions più sedi, franchising, or rete
-   Pre-written options (pick one):
-   - "Parlando con altri {{cleanJobTitle}} di reti immobiliari, una cosa che vedo spesso è che più sedi hai, più è difficile garantire che ogni ufficio risponda ai lead di portale entro i primi 5 minuti."
-   - "Una cosa che vedo spesso in franchising immobiliari: i lead arrivano, ma tra un ufficio e l'altro qualcuno risponde in ritardo — e il cliente è già passato al competitor."
+- Franchising / rete multi-sede (più uffici, brand immobiliare, rete di agenzie):
+  A) "Parlando con altri {{cleanJobTitle}} di reti immobiliari, il tema che esce sempre è che ogni sede risponde ai lead di portale in modo diverso, senza uno standard centralizzato."
+  B) "Ho notato che per reti come la vostra il problema vero sono i lead che arrivano a sedi diverse e non ricevono risposta nei tempi giusti — soprattutto fuori orario."
 
-C. PROPERTY DEVELOPER / NUOVA COSTRUZIONE — if {{IT_RealEstate_Industry}} mentions costruttore, developer, nuova costruzione
-   Pre-written options (pick one):
-   - "Parlando con altri {{cleanJobTitle}} nel real estate di sviluppo, una cosa ricorrente è che i lead di nuova costruzione arrivano da portali e Meta Ads, ma il follow-up è ancora manuale — e tra un contatto e l'appuntamento si perdono settimane."
-   - "Ho notato che per team come il vostro nel mercato di nuova costruzione, il tempo tra il primo lead e il primo contatto reale è spesso troppo lungo — e nel frattempo il lead raffredda."
+- Costruttore / developer (nuova costruzione, immobiliare di sviluppo, cantieri):
+  A) "Parlando con altri {{cleanJobTitle}} nel real estate di sviluppo, il tema che esce sempre sono i lead di nuova costruzione che si interessano, non ricevono risposta veloce, e spariscono."
+  B) "Una cosa che vedo spesso con i developer: i lead arrivano da portali e Meta Ads, ma tra il primo contatto e una risposta reale passano giorni — e l'interesse si raffredda in ore."
 
-D. STANDARD INDEPENDENT AGENCY — default
-   Pre-written options (pick one):
-   - "Parlando con altri {{cleanJobTitle}} in agenzia, una cosa che sento spesso: i lead di Immobiliare.it e Casa.it arrivano fuori orario, il weekend, o di sera — e quando li chiamate il giorno dopo, la metà ha già contattato qualcun altro."
-   - "Una cosa che vedo spesso nelle agenzie: i lead dai portali aspettano ore prima di ricevere risposta. Nel tempo che impiegate a richiamarli, hanno già parlato con un competitor."
+- Gestione affitti / property management (affitti, inquilini, property manager):
+  A) "Parlando con altri {{cleanJobTitle}}, il tema che esce sempre sono le richieste degli inquilini — rinnovi, guasti, documenti — che il team gestisce ancora a mano, una per una."
+  B) "Ho notato che per team come il vostro il vero problema sono le comunicazioni ricorrenti con gli inquilini che portano via ore ogni settimana senza generare valore."
 
-STEP 2 — Select the best-fitting option from the matching profile. Substitute [tool] with the actual tool name if profile A, leave other variables as-is.
+- Immobiliare commerciale (uffici, capannoni, negozi, immobili aziendali):
+  A) "Parlando con altri {{cleanJobTitle}}, il tema che esce sempre sono le trattative commerciali che si perdono perché il follow-up tra un contatto e l'altro è troppo lento."
+  B) "Ho notato che per team come il vostro il collo di bottiglia è il tempo che passa tra il primo interesse di un cliente e la prima risposta concreta — e nel frattempo il cliente guarda altrove."
 
-Rules:
-- Output ONLY the final sentence(s). No step labels, no reasoning.
-- Italian only
-- Do not add any words before or after the selected sentence
+REGOLE:
+- Sostituisci {{cleanJobTitle}} con il ruolo effettivo del lead
+- Se la descrizione è vaga, usa la categoria più vicina al settore immobiliare residenziale
+- Adatta le preposizioni perché la frase suoni naturale in italiano
+
+OUTPUT (OBBLIGATORIO):
+- Restituisci ESCLUSIVAMENTE la frase finale con {{cleanJobTitle}} già sostituito
+- NON mostrare Step 1, Step 2, categoria o ragionamento
+- L'output deve contenere SOLO la frase, nient'altro
 ```
 
 ---
 
 ## Column 4: `Friction_Context_Personalized`
-**Model:** Haiku 4.5 | **Temperature:** 0.5
-**Purpose:** 1–2 sentence friction context for Email 2 body — explains WHY they have the problem.
+**Model:** Haiku 4.5 | **Temp:** 0.5
 
 ```
-You are a cold email copywriter for Spoki, a WhatsApp automation platform for real estate agencies in Italy.
+Analizza la sottocategoria del lead: {{IT_RealEstate_Industry}} e {{keywordsFromApollo}}.
 
-Lead context:
-- Company: {{companyName}}
-- Job title: {{cleanJobTitle}}
-- Agency type: {{IT_RealEstate_Industry}}
-- Company description: {{companyDescriptionFromApollo}}
-- Pain identified: {{RealEstate_Pain_Point_Normalized}}
+Scrivi una frase breve e conversazionale in italiano che descriva la specifica frizione che fa perdere lead o clienti.
 
-STEP 1 — Select the friction profile:
+Regole specifiche per nicchia:
 
-A. FRANCHISE / MULTI-LOCATION (if {{IT_RealEstate_Industry}} or description mentions più sedi, rete, franchising):
-   → "Con più sedi, ogni ufficio gestisce i lead in modo diverso — orari differenti, agenti diversi, nessuna risposta centralizzata. Il risultato: il cliente chiama il primo che risponde, e non sempre siete voi."
+• Agenzia residenziale / indipendente: I lead dai portali non aspettano: se non ricevono risposta entro pochi minuti, chiamano la prima agenzia disponibile — che di solito non siete voi.
 
-B. SMALL TEAM / SINGLE OFFICE (default for independent agencies < 20 employees):
-   → "Con un team piccolo, seguire ogni lead di portale in tempo reale è impossibile — soprattutto fuori orario e il weekend, quando i clienti cercano casa ma voi non siete operativi."
+• Franchising / rete multi-sede: Con più sedi attive, garantire lo stesso standard di risposta ai lead in ogni ufficio è quasi impossibile senza un processo centralizzato.
 
-C. DEVELOPER / NUOVA COSTRUZIONE:
-   → "Il ciclo di acquisto per una nuova costruzione è lungo, ma la finestra per agganciare il lead è breve — se non rispondete nelle prime ore, il lead smette di rispondere e si guarda intorno."
+• Costruttore / developer: I lead di nuova costruzione hanno un ciclo d'acquisto lungo, ma la finestra di interesse iniziale dura ore — non giorni. Chi non risponde subito non recupera più.
 
-D. COMPETITOR TOOL USER (if {{technologiesFromApollo}} contains a WhatsApp tool):
-   → "Avere già uno strumento WhatsApp è un vantaggio, ma se non è configurato per rispondere ai lead di portale in automatico, state ancora perdendo contatti nelle prime ore critiche."
+• Gestione affitti / property management: Ogni richiesta dell'inquilino gestita a mano è tempo sottratto alle trattative vere. Il volume cresce, il team si satura, qualcosa si perde.
 
-STEP 2 — Output the selected sentence as-is. Substitute {{companyName}} or {{cleanJobTitle}} only if it improves naturalness.
+• Immobiliare commerciale: Le trattative commerciali richiedono follow-up precisi e tempestivi: ogni giorno di ritardo nella risposta aumenta il rischio che il cliente valuti alternative.
 
-Rules:
-- Max 25 words total
-- Italian only
-- Output ONLY the final sentence. No reasoning, no labels.
+Vincoli:
+- Massimo 25 parole
+- Evita gergo commerciale (niente "ottimizzazione" o "conversione")
+- Deve sembrare un'osservazione tra pari
+- Specifica sempre il soggetto della friction (es. "i lead dai portali", "le richieste degli inquilini")
+
+Output SEMPRE in italiano.
 ```
 
 ---
 
-## Column 5: `RealEstate_Social_Proof`
-**Model:** GPT-4o | **Temperature:** 0.3
-**Purpose:** Named client result for Email 2 body.
+## Column 5: `Social_Proof`
+**Model:** Haiku 4.5 | **Temp:** 0.5
 
 ```
-You are a cold email copywriter for Spoki, a WhatsApp automation platform for real estate agencies in Italy.
+Analizza la nicchia specifica di {{companyName}} all'interno del settore immobiliare (es. agenzia indipendente, rete franchising, developer, gestione affitti) analizzando {{IT_RealEstate_Industry}} e {{companyDescriptionFromApollo}}.
 
-Lead context:
-- Company: {{companyName}}
-- Agency type: {{IT_RealEstate_Industry}}
-- Company description: {{companyDescriptionFromApollo}}
-- Technologies used: {{technologiesFromApollo}}
+Seleziona il risultato Spoki più rilevante per il loro flusso operativo:
 
-STEP 1 — Select the social proof case:
+• Franchising / rete multi-sede: "Abbiamo aiutato reti immobiliari come la vostra a rispondere ai lead di portale in meno di 60 secondi per ogni sede, automaticamente su WhatsApp."
 
-A. If {{technologiesFromApollo}} contains a WhatsApp tool (Charles, ManyChat, Zendesk, Twilio, Respond.io):
-   → "Gattinoni, una delle principali reti di agenzie di viaggio in Italia, è migrata da Zendesk a Spoki — e ha ridotto il tempo di risposta ai lead da ore a secondi."
-   (Note: use this if competitor tool is detected — displacement proof is strongest signal)
+• Agenzia residenziale / indipendente: "Abbiamo aiutato agenzie indipendenti a triplicare il tasso di risposta ai lead nel weekend senza assumere personale aggiuntivo, automatizzando WhatsApp."
 
-B. If {{IT_RealEstate_Industry}} or {{companyDescriptionFromApollo}} suggests large franchise, rete, or multi-location (or companySize > 30):
-   → "Tempocasa, rete immobiliare con 50+ sedi in Italia, ha ridotto il tempo medio di risposta ai lead da 4 ore a 2 minuti — e ha firmato il contratto con noi in 12 giorni."
+• Costruttore / developer: "Abbiamo aiutato developer immobiliari a qualificare i lead di nuova costruzione in automatico su WhatsApp, riducendo il tempo dal primo contatto all'appuntamento da giorni a ore."
 
-C. Default (small/independent agency):
-   → "Percent Servicios Inmobiliarios, agenzia indipendente in Spagna, ha triplicato il tasso di risposta ai lead nel weekend senza assumere personale aggiuntivo."
+• Gestione affitti / property management: "Abbiamo aiutato team di property management a gestire richieste, rinnovi e manutenzioni su WhatsApp in automatico, liberando ore di lavoro manuale ogni settimana."
 
-STEP 2 — Output the selected sentence as-is.
+• Immobiliare commerciale: "Abbiamo aiutato agenzie commerciali a non perdere trattative per follow-up lenti, automatizzando il primo contatto WhatsApp entro 60 secondi da ogni richiesta."
 
-Rules:
-- Italian only
-- Output ONLY the social proof sentence. No reasoning, no explanation.
+Scrivi una sola frase (max 25 parole) con questa struttura:
+"Abbiamo aiutato [tipo agenzia] a [risultato concreto] automatizzando WhatsApp."
+
+Evita linguaggio generico.
+Usa termini specifici come portali, sedi, inquilini, cantiere, lead in base al lead.
+Non inserire mai nel copy il nome dell'azienda trovato in {{companyName}}.
+
+Output SEMPRE in italiano.
 ```
 
 ---
 
 ## Column 6: `IT_RealEstate_Solution_Normalized`
-**Model:** Haiku 4.5 | **Temperature:** 0.5
-**Purpose:** Single conversational solution sentence for Email 1 body. Two-step: select core → rewrite with natural opener.
+**Model:** Haiku 4.5 | **Temp:** 0.5
 
 ```
-You are a cold email copywriter for Spoki, a WhatsApp automation platform for real estate agencies in Italy.
+Step 1: In base a {{RealEstate_Pain_Point_Normalized}}, {{cleanJobTitle}}, {{technologiesFromApollo}} e {{IT_RealEstate_Industry}}, seleziona la soluzione Spoki più rilevante.
 
-Lead context:
-- Company: {{companyName}}
-- Job title: {{cleanJobTitle}}
-- Agency type: {{IT_RealEstate_Industry}}
-- Company description: {{companyDescriptionFromApollo}}
-- Technologies used: {{technologiesFromApollo}}
-- Pain identified: {{RealEstate_Pain_Point_Normalized}}
+Soluzioni disponibili:
 
-STEP 1 — Select the solution core that best fits. Check in order:
+- Risposta automatica ai lead di portale (agenzia residenziale / indipendente):
+"Spoki risponde automaticamente su WhatsApp a ogni lead di Immobiliare.it e Casa.it entro 60 secondi. Nessun agente deve essere disponibile: il lead riceve risposta mentre il competitor ancora aspetta."
 
-A. COMPETITOR DISPLACEMENT — if {{technologiesFromApollo}} contains Charles, ManyChat, Zendesk, Twilio, or Respond.io
-   → Core: "sostituiamo [nome tool] con un flusso WhatsApp più semplice — attivo in 48 ore, senza sviluppatori"
-   → Replace [nome tool] with the actual tool name found in Technologies
+- Centralizzazione risposta per reti (franchising / rete multi-sede):
+"Spoki centralizza la risposta ai lead di portale per tutte le sedi. Ogni ufficio risponde con lo stesso standard, in automatico, 24 ore su 24, senza coordinamento manuale."
 
-B. LARGE FRANCHISE / MULTI-LOCATION — if description or {{IT_RealEstate_Industry}} mentions più sedi, franchising, rete
-   → Core: "ogni sede risponde ai lead di portale in meno di 60 secondi — automaticamente, senza che nessun agente debba farlo a mano"
+- Follow-up nuova costruzione (costruttore / developer):
+"Spoki manda un messaggio WhatsApp in automatico a ogni lead di nuova costruzione entro 60 secondi. Il contatto si qualifica mentre la concorrenza non ha ancora risposto."
 
-C. PROPERTY DEVELOPER / NUOVA COSTRUZIONE — if {{IT_RealEstate_Industry}} or description mentions costruttore, developer, nuova costruzione
-   → Core: "automatizziamo il follow-up sui lead di nuova costruzione — dal primo contatto WhatsApp all'appuntamento in cantiere"
+- Gestione inquilini (property management / affitti):
+"Spoki gestisce su WhatsApp le richieste ricorrenti degli inquilini — rinnovi, guasti, documenti. Il team smette di rispondere a mano e si concentra sulle trattative."
 
-D. STANDARD INDEPENDENT AGENCY — default
-   → Core: "rispondiamo automaticamente ai lead di Immobiliare.it e Casa.it su WhatsApp — prima che chiamino il competitor"
+Step 2: Riscrivi la soluzione selezionata come una singola frase da inserire in una cold email. Collegala direttamente al pain point in {{RealEstate_Pain_Point_Normalized}}, come se lo stessi spiegando a voce.
 
-STEP 2 — Rewrite the selected core as a single conversational sentence. Choose ONE opener:
+Inizia con una di queste strutture:
 - "Noi aiutiamo agenzie come la vostra a..."
 - "Quello che facciamo è semplice:"
 - "In pratica,"
 
-Pick the opener that flows most naturally after {{RealEstate_Pain_Point_Normalized}}.
+Regole:
+- Massimo 25 parole
+- UNA sola soluzione, UN solo beneficio. Non elencare, non combinare
+- Linguaggio semplice e diretto, niente gergo marketing
+- Niente numeri o statistiche (vengono aggiunti altrove nell'email)
+- Deve suonare come un suggerimento tra colleghi, non come una headline pubblicitaria
 
-Rules:
-- Max 25 words total
-- No stats, no numbers, no product feature lists
-- Peer-to-peer tone
-- Italian only
-- Output ONLY the final sentence. No step labels, no reasoning.
+Esempi di tono giusto:
+- "Noi aiutiamo agenzie come la vostra a rispondere ai lead di portale su WhatsApp in automatico, prima che chiamino qualcun altro."
+- "Quello che facciamo è semplice: quando arriva un lead da Immobiliare.it, parte un WhatsApp in automatico — anche di notte, anche il weekend."
+- "In pratica, ogni lead che arriva da portale riceve una risposta WhatsApp in 60 secondi, senza che nessun agente debba farlo a mano."
+
+OUTPUT (OBBLIGATORIO):
+- Restituisci ESCLUSIVAMENTE la frase finale riscritta
+- NON mostrare Step 1, Step 2, quale soluzione hai scelto o il ragionamento
+- L'output deve contenere SOLO la frase, nient'altro
 ```
 
 ---
 
 ## Column 7: `RealEstate__Outcome_Metric_`
-**Model:** Haiku 4.5 | **Temperature:** 0.5
-**Purpose:** 1–2 sentence industry stat for Email 3 body. Note: double underscore in name is intentional (matches copy-frameworks.md naming convention).
+**Model:** Haiku 4.5 | **Temp:** 0.5
+*(Double underscore before Outcome, trailing underscore — exact naming from copy-frameworks.md)*
 
 ```
-You are a cold email copywriter for Spoki, a WhatsApp automation platform for real estate agencies in Italy.
+Obiettivo: mostrare l'impatto concreto che Spoki genera su una metrica chiave in base alla sottocategoria immobiliare del lead.
 
-Lead context:
-- Company: {{companyName}}
-- Agency type: {{IT_RealEstate_Industry}}
+Analizza {{IT_RealEstate_Industry}} e identifica quale superpower di Spoki è più rilevante:
 
-STEP 1 — Select the most relevant stat based on agency type:
+• Agenzia residenziale / indipendente: rispondere ai lead di portale prima dei competitor — le agenzie che rispondono entro 60 secondi convertono molte più trattative di quelle che aspettano anche solo un'ora.
 
-A. FRANCHISE / MULTI-LOCATION or DEVELOPER:
-   → "Harvard Business Review riporta che il 78% degli acquirenti sceglie la prima agenzia che risponde. Per una rete come {{companyName}}, ogni ora di ritardo equivale a cedere lead qualificati — e commissioni — ai competitor."
+• Franchising / rete multi-sede: standardizzare la risposta in tutte le sedi — ogni ufficio risponde con lo stesso standard e nello stesso tempo, senza coordinamento manuale tra agenti.
 
-B. STANDARD INDEPENDENT AGENCY (default):
-   → "Le agenzie che rispondono ai lead entro 60 secondi convertono il 391% in più rispetto a quelle che rispondono in un'ora (dati Velocify). Per {{companyName}}, questo è lead che vi scelgono — o che chiamano qualcun altro."
+• Costruttore / developer: qualificare i lead nel momento di massimo interesse — un messaggio WhatsApp automatico entro 60 secondi trasforma un lead freddo in un appuntamento in cantiere.
 
-STEP 2 — Output the selected sentence as-is, with {{companyName}} substituted.
+• Gestione affitti / property management: ridurre il tempo dedicato alle comunicazioni ricorrenti — automatizzare rinnovi, guasti e richieste degli inquilini libera ore di lavoro ogni settimana.
 
-Rules:
-- 2 sentences max
-- Italian only
-- Output ONLY the final text. No labels, no reasoning.
+• Immobiliare commerciale: non perdere trattative per follow-up lenti — nel commerciale, chi risponde per primo stabilisce il frame della negoziazione.
+
+Regole di normalizzazione:
+- Restituisci una sola frase, conversazionale, con un risultato specifico
+- Usa un linguaggio molto semplice, comprensibile a tutti
+- Concentrati su velocità di risposta o eliminazione delle frizioni
+- Niente elenchi, niente step, niente ragionamento
+
+Output SEMPRE in italiano. Una sola frase.
 ```
 
 ---
 
 ## Column 8: `IT_RealEstate_Subject_Line`
-**Model:** Haiku 4.5 | **Temperature:** 0.5
-**Purpose:** Email 1 subject line.
+**Model:** Haiku 4.5 | **Temp:** 0.5
 
 ```
-You are a cold email copywriter for Spoki, a WhatsApp automation platform for real estate agencies in Italy.
+Variabili di input: {{RealEstate_Pain_Point_Normalized}}, {{IT_RealEstate_Industry}}, {{cleanJobTitle}}
 
-Lead context:
-- Company: {{companyName}}
-- Agency type: {{IT_RealEstate_Industry}}
-- Pain identified: {{RealEstate_Pain_Point_Normalized}}
+Genera un oggetto email per una cold email in italiano.
 
-Write ONE subject line in Italian for a cold email to {{companyName}}.
+L'oggetto deve sembrare un messaggio che un collega o un contatto di lavoro manderebbe, non una newsletter o una promozione.
 
-Rules:
-- 2–4 words MAXIMUM — strictly enforced
-- ALL lowercase — no capitals anywhere
-- No questions — do not use "?" under any circumstances
-- No emoji
-- No punctuation at the end
-- Reference the core pain: slow lead response, losing portal leads to competitors
-- Sound like a colleague, not an ad
+Regole:
+- Tra 2 e 4 parole, tutto minuscolo
+- Deve sembrare personale e 1:1
+- Niente domande, niente emoji, niente punti esclamativi
+- Può fare riferimento al pain point in modo indiretto
+- Non deve contenere "?"
 
-Examples of correct format:
-- "lead persi di notte"
-- "risposta automatica portali"
-- "follow-up immediato immobiliare"
-- "lead immobiliare non risponde"
+Esempi di oggetti giusti:
+- "lead fuori orario"
+- "risposta ai portali"
+- "tempi di risposta"
+- "whatsapp per gli agenti"
+- "lead immobiliare"
+- "una cosa su {{IT_RealEstate_Industry}}"
 
-Examples of WRONG format (do not do these):
-- "Quanto tempo impiegate a rispondere?" — has a question mark, too long
-- "Lead Response Automation" — wrong language, capitalised
-- "🏠 rispondete ai lead?" — emoji + question
+Esempi di oggetti sbagliati:
+- "offerta esclusiva per te" (spam)
+- "aumenta le conversioni" (pubblicità)
+- "soluzione innovativa" (generico e da AI)
+- "opportunità imperdibile" (clickbait)
+- "ciao" (troppo vago)
 
-Return ONLY the subject line. No explanation, no quotes.
+Output: solo l'oggetto, nient'altro. In italiano.
 ```
 
 ---
 
-## How to create in Lemlist UI
+## Email variable map
 
-1. Go to **ITA_RealEstate** campaign → **Leads** tab
-2. Click **"Create AI Columns"** → **"Create AI columns"** dropdown → **"AI Column"** tab → **"Create from scratch"**
-3. For each column, set:
-   - **Column name**: exact name from table above (copy-paste to avoid typos)
-   - **AI model**: as specified per column
-   - **Temperature**: as specified per column
-   - **Prompt**: paste from above
-4. Create all 8 columns **in order** (1 → 8) — later columns depend on earlier ones
-5. After all 8 are created, click **"Enrich 2 leads"** to run on Marco Ferrari and Anna Rossi
-6. Review outputs before launching campaign
+| Email | Variables used |
+|-------|----------------|
+| E1 subject | `{{IT_RealEstate_Subject_Line}}` |
+| E1 body | `{{RealEstate_Pain_Point_Normalized}}` + `{{IT_RealEstate_Solution_Normalized}}` |
+| E2 body | `{{Friction_Context_Personalized}}` + `{{Social_Proof}}` |
+| E3 body | `{{RealEstate__Outcome_Metric_}}` |
+| E4 body | static — no AI column needed |
 
 ---
 
-## Variable reference — what maps to what from Apollo CSV import
+## Apollo CSV → Lemlist variable map
 
 | Lemlist variable | Apollo CSV column |
 |-----------------|-------------------|
@@ -352,4 +340,4 @@ Return ONLY the subject line. No explanation, no quotes.
 | `{{linkedinUrl}}` | Person Linkedin Url |
 | `{{location}}` | City |
 
-*Generated 2026-03-03 — Campaign: cam_XGHFWnDWroM6Reip9*
+*Updated 2026-03-03 — v3.0 on PDF framework*
