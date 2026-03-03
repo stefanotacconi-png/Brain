@@ -1,0 +1,12 @@
+# Claude worktrees — never commit
+.claude/worktrees/
+.claude/settings.local.json
+
+# Sensitive files
+.env
+.env.*
+secrets.*
+
+# OS
+.DS_Store
+Thumbs.db
