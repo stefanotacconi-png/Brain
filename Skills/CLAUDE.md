@@ -22,6 +22,28 @@ PROSPEO_API_KEY=
 WIZA_API_KEY=
 LINKEDIN_ACCESS_TOKEN=
 LINKEDIN_AD_ACCOUNT_ID=
+GOOGLE_CHAT_WEBHOOK=https://chat.googleapis.com/v1/spaces/AAQAhq1kBCw/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Jf_WY5tsWYm9Z5qIM2o1Qs0jHURvuHdVw7lvGPCc7IM
+```
+
+## Team Notifications (Google Chat)
+
+Use `google_chat.py` to notify the team about GTM activities:
+
+```bash
+# Lead scoring complete
+python google_chat.py --type leads --count 45 --tier1 12 --tier2 18 --source scored_companies.csv
+
+# Campaign launched
+python google_chat.py --type campaign --name "ITA Real Estate" --contacts 45 --tool Lemlist
+
+# Analysis output ready
+python google_chat.py --type analysis --file "won_deals_analysis_2026-03-02.md" --notes "750+ deals reviewed"
+
+# Custom update
+python google_chat.py --type custom --message "Paused Spain campaign — low open rates, revising copy"
+
+# Error alert
+python google_chat.py --type error --message "Apollo API rate limit hit — switching to Prospeo"
 ```
 
 ## What We Sell

@@ -6,6 +6,7 @@
 .env
 .env.*
 secrets.*
+google_chat.py
 
 # OS
 .DS_Store
