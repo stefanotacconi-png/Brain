@@ -2,11 +2,18 @@
 .claude/worktrees/
 .claude/settings.local.json
 
-# Sensitive files
+# Sensitive files — never commit
 .env
 .env.*
 secrets.*
 google_chat.py
+CLAUDE.md
+
+# Intermediate outputs — local only
+output/
+
+# Logs
+*.log
 
 # OS
 .DS_Store

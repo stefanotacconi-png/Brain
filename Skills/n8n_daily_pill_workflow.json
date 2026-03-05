@@ -1,0 +1,400 @@
+{
+  "name": "Sales Daily Pill — Google Chat",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * 1-5"
+            }
+          ]
+        },
+        "timezone": "Europe/Rome"
+      },
+      "id": "schedule-trigger",
+      "name": "⏰ Daily 10am Mon–Fri",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get day of week: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri\nconst now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Rome' }));\nconst dayOfWeek = now.getDay(); // 0=Sun, 1=Mon ... 5=Fri\nreturn [{ json: { dayOfWeek } }];"
+      },
+      "id": "get-day",
+      "name": "📅 Get Day of Week",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            { "outputKey": "monday", "conditions": { "conditions": [{ "id": "mon", "leftValue": "={{ $json.dayOfWeek }}", "rightValue": 1, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true },
+            { "outputKey": "tuesday", "conditions": { "conditions": [{ "id": "tue", "leftValue": "={{ $json.dayOfWeek }}", "rightValue": 2, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true },
+            { "outputKey": "wednesday", "conditions": { "conditions": [{ "id": "wed", "leftValue": "={{ $json.dayOfWeek }}", "rightValue": 3, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true },
+            { "outputKey": "thursday", "conditions": { "conditions": [{ "id": "thu", "leftValue": "={{ $json.dayOfWeek }}", "rightValue": 4, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true },
+            { "outputKey": "friday", "conditions": { "conditions": [{ "id": "fri", "leftValue": "={{ $json.dayOfWeek }}", "rightValue": 5, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true }
+          ]
+        },
+        "options": {}
+      },
+      "id": "day-switch",
+      "name": "📋 Route by Day",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [680, 300]
+    },
+
+    {
+      "parameters": {
+        "url": "https://api.hubapi.com/crm/v3/objects/deals/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_HUBSPOT_TOKEN" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"filterGroups\": [\n    {\n      \"filters\": [\n        { \"propertyName\": \"pipeline\", \"operator\": \"EQ\", \"value\": \"671838099\" },\n        { \"propertyName\": \"dealstage\", \"operator\": \"IN\", \"values\": [\"986053467\",\"986053468\",\"2674750700\"] },\n        { \"propertyName\": \"amount\", \"operator\": \"EQ\", \"value\": \"0\" }\n      ]\n    }\n  ],\n  \"properties\": [\"dealname\",\"dealstage\",\"amount\",\"closedate\",\"hubspot_owner_id\"],\n  \"sorts\": [{\"propertyName\": \"closedate\", \"direction\": \"ASCENDING\"}],\n  \"limit\": 5\n}",
+        "method": "POST"
+      },
+      "id": "mon-zero-deals",
+      "name": "🔴 MON: €0 Value Deals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 80]
+    },
+    {
+      "parameters": {
+        "url": "https://api.hubapi.com/crm/v3/objects/deals/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_HUBSPOT_TOKEN" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"filterGroups\": [\n    {\n      \"filters\": [\n        { \"propertyName\": \"pipeline\", \"operator\": \"EQ\", \"value\": \"671838099\" },\n        { \"propertyName\": \"dealstage\", \"operator\": \"NOT_IN\", \"values\": [\"986053469\",\"986053470\"] },\n        { \"propertyName\": \"closedate\", \"operator\": \"LT\", \"value\": \"{{ Math.floor(Date.now()) }}\" },\n        { \"propertyName\": \"amount\", \"operator\": \"GT\", \"value\": \"0\" }\n      ]\n    }\n  ],\n  \"properties\": [\"dealname\",\"dealstage\",\"amount\",\"closedate\",\"hubspot_owner_id\"],\n  \"sorts\": [{\"propertyName\": \"amount\", \"direction\": \"DESCENDING\"}],\n  \"limit\": 5\n}",
+        "method": "POST"
+      },
+      "id": "mon-overdue-deals",
+      "name": "📅 MON: Overdue Deals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Owner ID to name map\nconst owners = {\n  '75722736': 'Cristina',\n  '75722777': 'Giuseppe',\n  '30727447': 'Víctor',\n  '31172513': 'Marco',\n  '30334309': 'Vincenzo',\n  '31903434': 'Bruno',\n  '30908030': 'Manuel',\n  '31012966': 'Stefano'\n};\n\nconst stageNames = {\n  '986053466': 'Discovery',\n  '986053467': 'Demo',\n  '986053468': 'Follow-up',\n  '2674750700': 'Negotiation/Trial'\n};\n\nconst zeroDealsList = $input.all().filter(i => i.json.results !== undefined)[0]?.json?.results || [];\nconst overdueDealsList = $input.all().filter(i => i.json.results !== undefined)[1]?.json?.results || [];\n\nconst formatEuro = (v) => v ? `€${Number(v).toLocaleString('it-IT')}` : '€0';\nconst formatDate = (d) => d ? new Date(d).toLocaleDateString('it-IT', {day:'2-digit',month:'short'}) : 'no date';\n\nlet msg = 'hey team, oggi tips & focus 🧹\\n\\n*📊 Lunedì — Data Hygiene Day*\\nPipeline pulita = forecast preciso = target centrato.\\n';\n\nif (zeroDealsList.length) {\n  msg += '\\n*🚨 Deals avanzati con €0 — update ASAP:*\\n';\n  for (const d of zeroDealsList.slice(0,4)) {\n    const p = d.properties;\n    const owner = owners[p.hubspot_owner_id] || 'N/A';\n    const stage = stageNames[p.dealstage] || p.dealstage;\n    msg += `• *${p.dealname}* (${stage}) → ${owner}, aggiungi valore oggi\\n`;\n  }\n}\n\nif (overdueDealsList.length) {\n  msg += '\\n*📅 Close date scadute — aggiorna o chiudi:*\\n';\n  for (const d of overdueDealsList.slice(0,5)) {\n    const p = d.properties;\n    const owner = owners[p.hubspot_owner_id] || 'N/A';\n    msg += `• *${p.dealname}* ${formatEuro(p.amount)} (scaduto ${formatDate(p.closedate)}) → ${owner}\\n`;\n  }\n}\n\nmsg += `\\n💡 *Perché conta:* ${$input.all()[0]?.json?.total || 0} deals con date scadute + almeno ${zeroDealsList.length} deals avanzati a €0 = forecast sbagliato. 5 min a deal e sistemiamo tutto 💪`;\n\nreturn [{ json: { text: msg } }];"
+      },
+      "id": "mon-build-msg",
+      "name": "💬 MON: Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 130]
+    },
+
+    {
+      "parameters": {
+        "url": "https://api.hubapi.com/crm/v3/objects/deals/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_HUBSPOT_TOKEN" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"filterGroups\": [\n    {\n      \"filters\": [\n        { \"propertyName\": \"pipeline\", \"operator\": \"EQ\", \"value\": \"671838099\" },\n        { \"propertyName\": \"dealstage\", \"operator\": \"NOT_IN\", \"values\": [\"986053469\",\"986053470\"] },\n        { \"propertyName\": \"closedate\", \"operator\": \"LT\", \"value\": \"{{ Math.floor(Date.now()) }}\" },\n        { \"propertyName\": \"amount\", \"operator\": \"GT\", \"value\": \"0\" }\n      ]\n    }\n  ],\n  \"properties\": [\"dealname\",\"dealstage\",\"amount\",\"closedate\",\"hubspot_owner_id\",\"hs_lastcontacted\"],\n  \"sorts\": [{\"propertyName\": \"amount\", \"direction\": \"DESCENDING\"}],\n  \"limit\": 6\n}",
+        "method": "POST"
+      },
+      "id": "tue-overdue-deals",
+      "name": "📅 TUE: Overdue Deals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const owners = {'75722736':'Cristina','75722777':'Giuseppe','30727447':'Víctor','31172513':'Marco','30334309':'Vincenzo','31903434':'Bruno','30908030':'Manuel','31012966':'Stefano'};\nconst stageNames = {'986053466':'Discovery','986053467':'Demo','986053468':'Follow-up','2674750700':'Negotiation/Trial'};\nconst results = $input.first()?.json?.results || [];\nconst total = $input.first()?.json?.total || 0;\nconst formatEuro = (v) => v ? `€${Number(v).toLocaleString('it-IT')}` : '€0';\nconst formatDate = (d) => d ? new Date(d).toLocaleDateString('it-IT', {day:'2-digit',month:'short'}) : 'no date';\n\nlet msg = 'hey team, oggi tips & focus 📅\\n\\n*📅 Martedì — Overdue Close Dates*\\nDeals con close date scaduta = pipeline bloccata.\\n\\n*🔥 Top deals da sbloccare subito:*\\n';\nfor (const d of results.slice(0,6)) {\n  const p = d.properties;\n  const owner = owners[p.hubspot_owner_id] || 'N/A';\n  const stage = stageNames[p.dealstage] || p.dealstage;\n  msg += `• *${p.dealname}* — ${formatEuro(p.amount)} — ${stage}\\n  ↳ Scaduto ${formatDate(p.closedate)} → *${owner}*, aggiorna o chiudi\\n`;\n}\nmsg += `\\n💡 *${total} deals totali con close date nel passato* — 2 min per aggiornare ogni deal = forecast pulito. Facciamolo oggi! 💪`;\nreturn [{ json: { text: msg } }];"
+      },
+      "id": "tue-build-msg",
+      "name": "💬 TUE: Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 300]
+    },
+
+    {
+      "parameters": {
+        "url": "https://api.hubapi.com/crm/v3/objects/deals/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_HUBSPOT_TOKEN" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"filterGroups\": [\n    {\n      \"filters\": [\n        { \"propertyName\": \"pipeline\", \"operator\": \"EQ\", \"value\": \"671838099\" },\n        { \"propertyName\": \"dealstage\", \"operator\": \"IN\", \"values\": [\"986053468\",\"2674750700\"] },\n        { \"propertyName\": \"amount\", \"operator\": \"GT\", \"value\": \"5000\" },\n        { \"propertyName\": \"closedate\", \"operator\": \"GT\", \"value\": \"{{ Math.floor(Date.now()) }}\" }\n      ]\n    }\n  ],\n  \"properties\": [\"dealname\",\"dealstage\",\"amount\",\"closedate\",\"hubspot_owner_id\",\"hs_next_step\"],\n  \"sorts\": [{\"propertyName\": \"amount\", \"direction\": \"DESCENDING\"}],\n  \"limit\": 5\n}",
+        "method": "POST"
+      },
+      "id": "wed-hot-deals",
+      "name": "🔥 WED: Hot Deals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "const owners = {'75722736':'Cristina','75722777':'Giuseppe','30727447':'Víctor','31172513':'Marco','30334309':'Vincenzo','31903434':'Bruno','30908030':'Manuel','31012966':'Stefano'};\nconst stageNames = {'986053466':'Discovery','986053467':'Demo','986053468':'Follow-up','2674750700':'Negotiation/Trial'};\nconst results = $input.first()?.json?.results || [];\nconst formatEuro = (v) => v ? `€${Number(v).toLocaleString('it-IT')}` : '€0';\nconst formatDate = (d) => d ? new Date(d).toLocaleDateString('it-IT', {day:'2-digit',month:'short'}) : 'TBD';\n\nlet msg = 'hey team, oggi tips & focus 🔥\\n\\n*🔥 Mercoledì — Hot Deals da Spingere*\\nDeals in Follow-up e Negoziazione con alto potenziale. Spingiamo ora!\\n\\n*💰 Top deals da closing entro fine mese:*\\n';\nfor (const d of results.slice(0,5)) {\n  const p = d.properties;\n  const owner = owners[p.hubspot_owner_id] || 'N/A';\n  const stage = stageNames[p.dealstage] || p.dealstage;\n  const nextStep = p.hs_next_step ? `\\n  ↳ Next step: ${p.hs_next_step.substring(0,60)}` : '\\n  ↳ ⚠️ No next step — definiscilo oggi';\n  msg += `• *${p.dealname}* — ${formatEuro(p.amount)} — ${stage} — close: ${formatDate(p.closedate)}\\n  ↳ Owner: *${owner}*${nextStep}\\n`;\n}\nmsg += '\\n💡 Controlla che ogni deal abbia un next step chiaro. Senza next step = deal congelato. 🎯';\nreturn [{ json: { text: msg } }];"
+      },
+      "id": "wed-build-msg",
+      "name": "💬 WED: Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 420]
+    },
+
+    {
+      "parameters": {
+        "url": "https://api.hubapi.com/crm/v3/objects/deals/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_HUBSPOT_TOKEN" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"filterGroups\": [\n    {\n      \"filters\": [\n        { \"propertyName\": \"pipeline\", \"operator\": \"EQ\", \"value\": \"671838099\" },\n        { \"propertyName\": \"dealstage\", \"operator\": \"IN\", \"values\": [\"986053466\",\"986053467\",\"986053468\"] },\n        { \"propertyName\": \"hs_lastmodifieddate\", \"operator\": \"LT\", \"value\": \"{{ Math.floor(Date.now() - 30 * 24 * 60 * 60 * 1000) }}\" },\n        { \"propertyName\": \"amount\", \"operator\": \"GT\", \"value\": \"0\" }\n      ]\n    }\n  ],\n  \"properties\": [\"dealname\",\"dealstage\",\"amount\",\"hubspot_owner_id\",\"hs_lastmodifieddate\"],\n  \"sorts\": [{\"propertyName\": \"amount\", \"direction\": \"DESCENDING\"}],\n  \"limit\": 6\n}",
+        "method": "POST"
+      },
+      "id": "thu-frozen-deals",
+      "name": "🧊 THU: Frozen Deals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 540]
+    },
+    {
+      "parameters": {
+        "jsCode": "const owners = {'75722736':'Cristina','75722777':'Giuseppe','30727447':'Víctor','31172513':'Marco','30334309':'Vincenzo','31903434':'Bruno','30908030':'Manuel','31012966':'Stefano'};\nconst stageNames = {'986053466':'Discovery','986053467':'Demo','986053468':'Follow-up','2674750700':'Negotiation/Trial'};\nconst results = $input.first()?.json?.results || [];\nconst total = $input.first()?.json?.total || 0;\nconst formatEuro = (v) => v ? `€${Number(v).toLocaleString('it-IT')}` : '€0';\nconst daysSince = (d) => d ? Math.floor((Date.now() - new Date(d).getTime()) / (1000*60*60*24)) : '?';\n\nlet msg = 'hey team, oggi tips & focus 🧊\\n\\n*🧊 Giovedì — Frozen Deals: Sblocchiamo!*\\nDeals fermi da +30 giorni senza aggiornamenti = pipeline falsa.\\n\\n*💤 Top deals da riattivare:*\\n';\nfor (const d of results.slice(0,6)) {\n  const p = d.properties;\n  const owner = owners[p.hubspot_owner_id] || 'N/A';\n  const stage = stageNames[p.dealstage] || p.dealstage;\n  const days = daysSince(p.hs_lastmodifieddate);\n  msg += `• *${p.dealname}* — ${formatEuro(p.amount)} — ${stage}\\n  ↳ Fermo da *${days} giorni* → *${owner}*, ricontatta o chiudi\\n`;\n}\nmsg += `\\n💡 *${total} deals totali congelati* — Un'email di 3 righe o una chiamata di 5 min può sbloccarli. In bocca al lupo! 🎯`;\nreturn [{ json: { text: msg } }];"
+      },
+      "id": "thu-build-msg",
+      "name": "💬 THU: Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 540]
+    },
+
+    {
+      "parameters": {
+        "url": "https://api.hubapi.com/crm/v3/objects/deals/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_HUBSPOT_TOKEN" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"filterGroups\": [\n    {\n      \"filters\": [\n        { \"propertyName\": \"pipeline\", \"operator\": \"EQ\", \"value\": \"671838099\" },\n        { \"propertyName\": \"dealstage\", \"operator\": \"EQ\", \"value\": \"986053469\" },\n        { \"propertyName\": \"closedate\", \"operator\": \"GT\", \"value\": \"{{ Math.floor(Date.now() - 7 * 24 * 60 * 60 * 1000) }}\" }\n      ]\n    }\n  ],\n  \"properties\": [\"dealname\",\"amount\",\"closedate\",\"hubspot_owner_id\"],\n  \"sorts\": [{\"propertyName\": \"amount\", \"direction\": \"DESCENDING\"}],\n  \"limit\": 5\n}",
+        "method": "POST"
+      },
+      "id": "fri-wins",
+      "name": "🏆 FRI: Wins This Week",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 660]
+    },
+    {
+      "parameters": {
+        "url": "https://api.hubapi.com/crm/v3/objects/deals/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_HUBSPOT_TOKEN" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"filterGroups\": [\n    {\n      \"filters\": [\n        { \"propertyName\": \"pipeline\", \"operator\": \"EQ\", \"value\": \"671838099\" },\n        { \"propertyName\": \"dealstage\", \"operator\": \"IN\", \"values\": [\"2674750700\"] },\n        { \"propertyName\": \"amount\", \"operator\": \"GT\", \"value\": \"3000\" }\n      ]\n    }\n  ],\n  \"properties\": [\"dealname\",\"amount\",\"closedate\",\"hubspot_owner_id\"],\n  \"sorts\": [{\"propertyName\": \"amount\", \"direction\": \"DESCENDING\"}],\n  \"limit\": 3\n}",
+        "method": "POST"
+      },
+      "id": "fri-closing",
+      "name": "🎯 FRI: Closing Soon",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 760]
+    },
+    {
+      "parameters": {
+        "jsCode": "const owners = {'75722736':'Cristina','75722777':'Giuseppe','30727447':'Víctor','31172513':'Marco','30334309':'Vincenzo','31903434':'Bruno','30908030':'Manuel','31012966':'Stefano'};\nconst wins = $input.all().filter(i => i.json.results !== undefined)[0]?.json?.results || [];\nconst closing = $input.all().filter(i => i.json.results !== undefined)[1]?.json?.results || [];\nconst formatEuro = (v) => v ? `€${Number(v).toLocaleString('it-IT')}` : '€0';\n\nlet msg = 'hey team, oggi tips & focus 🏆\\n\\n*🏆 Venerdì — Wins & Momentum*\\nFiniamo la settimana forte! Ecco i risultati e cosa dobbiamo spingere.\\n';\n\nif (wins.length) {\n  const totalWon = wins.reduce((s, d) => s + Number(d.properties.amount || 0), 0);\n  msg += `\\n*🎉 Chiusi questa settimana (€${Number(totalWon).toLocaleString('it-IT')} totale):*\\n`;\n  for (const d of wins) {\n    const p = d.properties;\n    const owner = owners[p.hubspot_owner_id] || 'N/A';\n    msg += `• *${p.dealname}* — ${formatEuro(p.amount)} → *${owner}* 🎉\\n`;\n  }\n} else {\n  msg += '\\n*🎯 Nessuna chiusura questa settimana* — spingiamo i deal in Negoziazione!\\n';\n}\n\nif (closing.length) {\n  msg += '\\n*⚡ In Negoziazione — da chiudere la settimana prossima:*\\n';\n  for (const d of closing) {\n    const p = d.properties;\n    const owner = owners[p.hubspot_owner_id] || 'N/A';\n    const closeDate = p.closedate ? new Date(p.closedate).toLocaleDateString('it-IT', {day:'2-digit',month:'short'}) : 'TBD';\n    msg += `• *${p.dealname}* — ${formatEuro(p.amount)} — close: ${closeDate} → *${owner}*\\n`;\n  }\n}\n\nmsg += '\\nBuon weekend a tutti! Settimana prossima si chiude 🚀';\nreturn [{ json: { text: msg } }];"
+      },
+      "id": "fri-build-msg",
+      "name": "💬 FRI: Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 710]
+    },
+
+    {
+      "parameters": {
+        "url": "https://chat.googleapis.com/v1/spaces/AAQAhq1kBCw/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Jf_WY5tsWYm9Z5qIM2o1Qs0jHURvuHdVw7lvGPCc7IM",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ text: $json.text }) }}",
+        "method": "POST"
+      },
+      "id": "send-mon",
+      "name": "📨 Send MON",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 130]
+    },
+    {
+      "parameters": {
+        "url": "https://chat.googleapis.com/v1/spaces/AAQAhq1kBCw/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Jf_WY5tsWYm9Z5qIM2o1Qs0jHURvuHdVw7lvGPCc7IM",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ text: $json.text }) }}",
+        "method": "POST"
+      },
+      "id": "send-tue",
+      "name": "📨 Send TUE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://chat.googleapis.com/v1/spaces/AAQAhq1kBCw/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Jf_WY5tsWYm9Z5qIM2o1Qs0jHURvuHdVw7lvGPCc7IM",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ text: $json.text }) }}",
+        "method": "POST"
+      },
+      "id": "send-wed",
+      "name": "📨 Send WED",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 420]
+    },
+    {
+      "parameters": {
+        "url": "https://chat.googleapis.com/v1/spaces/AAQAhq1kBCw/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Jf_WY5tsWYm9Z5qIM2o1Qs0jHURvuHdVw7lvGPCc7IM",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ text: $json.text }) }}",
+        "method": "POST"
+      },
+      "id": "send-thu",
+      "name": "📨 Send THU",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 540]
+    },
+    {
+      "parameters": {
+        "url": "https://chat.googleapis.com/v1/spaces/AAQAhq1kBCw/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Jf_WY5tsWYm9Z5qIM2o1Qs0jHURvuHdVw7lvGPCc7IM",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ text: $json.text }) }}",
+        "method": "POST"
+      },
+      "id": "send-fri",
+      "name": "📨 Send FRI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 710]
+    }
+  ],
+  "connections": {
+    "⏰ Daily 10am Mon–Fri": {
+      "main": [[{ "node": "📅 Get Day of Week", "type": "main", "index": 0 }]]
+    },
+    "📅 Get Day of Week": {
+      "main": [[{ "node": "📋 Route by Day", "type": "main", "index": 0 }]]
+    },
+    "📋 Route by Day": {
+      "main": [
+        [{ "node": "🔴 MON: €0 Value Deals", "type": "main", "index": 0 }, { "node": "📅 MON: Overdue Deals", "type": "main", "index": 0 }],
+        [{ "node": "📅 TUE: Overdue Deals", "type": "main", "index": 0 }],
+        [{ "node": "🔥 WED: Hot Deals", "type": "main", "index": 0 }],
+        [{ "node": "🧊 THU: Frozen Deals", "type": "main", "index": 0 }],
+        [{ "node": "🏆 FRI: Wins This Week", "type": "main", "index": 0 }, { "node": "🎯 FRI: Closing Soon", "type": "main", "index": 0 }]
+      ]
+    },
+    "🔴 MON: €0 Value Deals": {
+      "main": [[{ "node": "💬 MON: Build Message", "type": "main", "index": 0 }]]
+    },
+    "📅 MON: Overdue Deals": {
+      "main": [[{ "node": "💬 MON: Build Message", "type": "main", "index": 1 }]]
+    },
+    "💬 MON: Build Message": {
+      "main": [[{ "node": "📨 Send MON", "type": "main", "index": 0 }]]
+    },
+    "📅 TUE: Overdue Deals": {
+      "main": [[{ "node": "💬 TUE: Build Message", "type": "main", "index": 0 }]]
+    },
+    "💬 TUE: Build Message": {
+      "main": [[{ "node": "📨 Send TUE", "type": "main", "index": 0 }]]
+    },
+    "🔥 WED: Hot Deals": {
+      "main": [[{ "node": "💬 WED: Build Message", "type": "main", "index": 0 }]]
+    },
+    "💬 WED: Build Message": {
+      "main": [[{ "node": "📨 Send WED", "type": "main", "index": 0 }]]
+    },
+    "🧊 THU: Frozen Deals": {
+      "main": [[{ "node": "💬 THU: Build Message", "type": "main", "index": 0 }]]
+    },
+    "💬 THU: Build Message": {
+      "main": [[{ "node": "📨 Send THU", "type": "main", "index": 0 }]]
+    },
+    "🏆 FRI: Wins This Week": {
+      "main": [[{ "node": "💬 FRI: Build Message", "type": "main", "index": 0 }]]
+    },
+    "🎯 FRI: Closing Soon": {
+      "main": [[{ "node": "💬 FRI: Build Message", "type": "main", "index": 1 }]]
+    },
+    "💬 FRI: Build Message": {
+      "main": [[{ "node": "📨 Send FRI", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "timezone": "Europe/Rome",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionOrder": "v1"
+  },
+  "tags": ["sales", "daily-pill", "google-chat", "hubspot"]
+}
