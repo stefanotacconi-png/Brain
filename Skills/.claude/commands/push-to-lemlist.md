@@ -95,6 +95,20 @@ The cold-email-writer skill outputs these columns — they map directly to Lemli
 - `subject_2`, `body_2`
 - `subject_3`, `body_3`
 
+## Pre-Push Quality Gate (mandatory)
+
+Before uploading any leads to Lemlist, verify the following. If any check fails, stop and resolve it first.
+
+| Check | How to verify | Fail action |
+|-------|--------------|-------------|
+| Gate 1 spot-check completed | `session_log.md` has a Gate 1 entry for this list | Run Gate 1 via `/enrich-leads` before proceeding |
+| Contamination rate ≤ 20% | Gate 1 log shows ≤2/10 off-target | Fix Apollo search, re-export, re-run Gate 1 |
+| Only Tier 1 + Tier 2 in CSV | `tier` column contains no Tier 3 or Disqualified rows | Filter them out — never push Tier 3 |
+| No placeholder variables in email copy | Search for `[INSERT`, `{{RealEstate_Value_Gift_Teaser}}`, `https://wa.me/demo` in the copy CSV | Replace all placeholders before upload |
+| Email variable names match Lemlist column names exactly | Cross-check `{{variable}}` names in email body vs column headers in CSV | Mismatches silently produce empty output |
+
+**Rationale:** Lemlist AI columns catch some contamination via GUARD patterns, but they cannot fix list quality problems — they only produce `NON_TARGET` output, which wastes campaign sends on unqualified contacts. List quality must be fixed upstream at the Apollo stage.
+
 ## Safety Rules
 
 - NEVER start the campaign without explicit user "YES" confirmation

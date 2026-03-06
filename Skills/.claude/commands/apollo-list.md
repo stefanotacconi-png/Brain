@@ -101,23 +101,104 @@ Append to `/output/session_log.md`:
 /apollo-list    ← will ask for name and criteria
 ```
 
+## ⚠️ Apollo Taxonomy Trap (read before building any list)
+
+Apollo's industry tags are **self-reported** by companies on LinkedIn and are often inaccurate or overly broad. A search filtered to "Real Estate" will routinely return:
+- Energy suppliers and utilities that own property
+- Facility management and engineering firms serving the RE sector
+- PropTech/SaaS companies selling software to real estate agencies
+- Consulting firms with a real estate practice
+
+**The tag tells you what the company claims — not what they actually do.**
+
+### Mandatory Spot-Check Before Proceeding
+
+After exporting any list from Apollo, **before enrichment or Lemlist push**, spot-check 10 random company descriptions:
+
+1. Pull 10 random rows from the export CSV
+2. Read their `company description` or `LinkedIn about` section
+3. Ask: "Does this company actively buy/sell/rent/manage property for end customers?"
+4. If **>2 out of 10** are off-target → stop. Refine the Apollo search using the keyword inclusions and exclusions below before proceeding.
+5. If ≤2 off-target → acceptable contamination. Log the false positive count in session_log.md and proceed.
+
+---
+
 ## Search Criteria by Campaign Type (from CLAUDE.md ICP)
 
-**Italian Real Estate:**
-- Titles: CEO, Founder, Amministratore Delegato, Sales Director, Head of Sales, Responsabile Commerciale, Direttore Commerciale, Direttore Vendite, General Manager, Country Manager
-- Location: Italy | Size: 10–500
-- Keywords: `real estate`, `agenzia immobiliare`, `immobiliare`
+### Italian Real Estate — ITA_RealEstate
 
-**Italian Beauty/Wellness:**
-- Titles: CEO, Founder, Amministratore Delegato, General Manager, Marketing Director
-- Location: Italy | Size: 10–500
-- Keywords: `beauty`, `wellness`, `spa`, `salone`, `estetica`, `clinica estetica`
+**Titles to include:**
+CEO, Founder, Amministratore Delegato, Sales Director, Head of Sales, Responsabile Commerciale, Direttore Commerciale, Direttore Vendite, General Manager, Country Manager, Titolare, Responsabile Vendite
 
-**Spain Real Estate:**
-- Same titles + location: Spain
-- Keywords: `inmobiliaria`, `real estate`, `agencia inmobiliaria`
+**Titles to exclude (common false positives):**
+- Project Manager, Facility Manager, Energy Manager, Ingegnere, Tecnico
+- Software Engineer, CTO, Product Manager (PropTech filter)
+- Consulente (generic consultants rarely qualify)
 
-Refer to CLAUDE.md ICP and Target Industries sections for other verticals.
+**Location:** Italy | **Size:** 10–500
+
+**Keyword inclusions** (use in `q_organization_keyword_tags` — these confirm genuine RE activity):
+- `agenzia immobiliare` (agency — strongest signal)
+- `compravendita` (buy/sell transactions — genuine agency)
+- `affitti` (rentals — property management angle)
+- `nuova costruzione` (new build developer)
+- `gestione immobiliare` (property management)
+- `Immobiliare.it` or `Casa.it` (portal integrations — strong signal of active agency)
+- `franchising immobiliare` (franchise networks — Tecnocasa, Gabetti, RE/MAX)
+- `real estate agency`, `real estate` (for English-language profiles)
+
+**Keyword exclusions** (add to filter OUT false positives):
+- `facility management` → FM firms, not RE agencies
+- `progettazione impianti` → engineering/systems design
+- `fornitura energia` / `energia rinnovabile` → energy suppliers
+- `software` / `SaaS` / `PropTech` → tech companies serving RE, not agencies
+- `consulenza manageriale` → management consulting
+- `costruzioni` alone (without `nuova costruzione` pair) → construction, not agency
+
+**Apollo search template:**
+```json
+{
+  "page": 1,
+  "per_page": 100,
+  "person_titles": ["CEO", "Founder", "Amministratore Delegato", "Responsabile Commerciale", "Direttore Vendite", "Head of Sales", "General Manager"],
+  "person_locations": ["Italy"],
+  "organization_num_employees_ranges": ["10,500"],
+  "q_organization_keyword_tags": ["agenzia immobiliare", "compravendita", "affitti", "nuova costruzione"],
+  "not_q_organization_keyword_tags": ["facility management", "software immobiliare", "SaaS", "fornitura energia"]
+}
+```
+
+> Run spot-check before proceeding. Target: <20% contamination rate.
+
+---
+
+### Italian Beauty/Wellness
+
+**Titles:** CEO, Founder, Amministratore Delegato, General Manager, Marketing Director, Titolare
+**Location:** Italy | **Size:** 10–500
+**Keywords:** `beauty`, `wellness`, `spa`, `salone`, `estetica`, `clinica estetica`, `centro benessere`, `laser`, `medicina estetica`
+**Exclusions:** `cosmetica` (product manufacturers, not service providers), `e-commerce beauty` (unless also B2C service)
+
+---
+
+### Spain Real Estate
+
+**Titles:** CEO, Founder, Director General, Director Comercial, Head of Sales, Responsable Comercial, Gerente
+**Location:** Spain | **Size:** 10–500
+**Keywords:** `inmobiliaria`, `agencia inmobiliaria`, `compraventa`, `alquileres`, `gestión de propiedades`, `real estate`
+**Exclusions:** `facility management`, `energía`, `software inmobiliario`, `consultoría`
+
+---
+
+### Spain Beauty/Wellness
+
+**Titles:** CEO, Founder, Director General, Gerente, Director de Marketing
+**Location:** Spain | **Size:** 10–500
+**Keywords:** `belleza`, `wellness`, `spa`, `salón`, `estética`, `clínica estética`, `centro de belleza`
+
+---
+
+Refer to CLAUDE.md ICP and Target Industries sections for other verticals. Always apply the Taxonomy Trap logic when building any new vertical.
 
 ## Notes
 
@@ -125,4 +206,5 @@ Refer to CLAUDE.md ICP and Target Industries sections for other verticals.
 - `email_status: unavailable` means the email exists but needs Apollo credits to unlock — use `/enrich-leads` afterwards
 - The label (list) is auto-created in Apollo when the first contact is pushed with that `label_names` value
 - If a contact already exists in Apollo CRM (matched by LinkedIn URL), Apollo will create a duplicate — deduplication must be done manually in the UI
-- After list creation, run `/cold-email-writer` to generate copy, then `/push-to-lemlist` to launch the campaign
+- After list creation, **run spot-check**, then `/enrich-leads`, then `/cold-email-writer`, then `/push-to-lemlist`
+- Log contamination rate and spot-check result in `/output/session_log.md` for every list built
