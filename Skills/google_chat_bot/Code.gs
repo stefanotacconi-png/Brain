@@ -1,15 +1,39 @@
 // =============================================================================
 // Spoki GTM Assistant — Google Chat Bot
-// Powered by Claude API (Anthropic)
-// Deploy as a Google Apps Script Web App, then configure as a Google Chat App
+// Powered by OpenAI API (GPT-4o) + Google Docs KB + HubSpot live sync
+// =============================================================================
+//
+// SETUP (run once):
+//   1. Open Script Properties and add: OPENAI_API_KEY
+//   2. Run setupBot() from the Apps Script editor — creates 2 Google Docs + nightly trigger
+//   3. Open Script Properties and add: HUBSPOT_API_TOKEN (HubSpot Private App token)
+//   4. Run syncHubSpotToDoc() to populate live CRM data immediately
+//
+// ONGOING:
+//   - Edit the Static KB doc directly (link logged by setupBot)
+//   - HubSpot sync runs automatically every night at 2am
+//   - Redeploy only when changing code logic, never for KB updates
 // =============================================================================
 
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
+const OPENAI_MODEL = 'gpt-4o';
 
-// ---------------------------------------------------------------------------
-// GTM Knowledge Base — system prompt injected into every Claude call
-// ---------------------------------------------------------------------------
-const SYSTEM_PROMPT = `You are a GTM assistant for Spoki — an expert on our product, ICP, copy strategy, competitive landscape, and outreach playbooks.
+// Script Properties keys
+const PROP_OPENAI_KEY     = 'OPENAI_API_KEY';
+const PROP_HUBSPOT_TOKEN  = 'HUBSPOT_API_TOKEN';
+const PROP_STATIC_DOC_ID  = 'KB_STATIC_DOC_ID';
+const PROP_DYNAMIC_DOC_ID = 'KB_DYNAMIC_DOC_ID';
+
+// Cache keys & TTLs
+const CACHE_STATIC_KB  = 'KB_STATIC';
+const CACHE_DYNAMIC_KB = 'KB_DYNAMIC';
+const CACHE_TTL_STATIC  = 21600; // 6 hours
+const CACHE_TTL_DYNAMIC = 3600;  // 1 hour
+
+// Closed Won stage IDs across all pipelines
+const CLOSED_WON_STAGES = ['2143720639', '986053469', '2201511127', '2318129391', '3675734213', '3689627873', '4430067919'];
+
+// Fixed persona — edit here in code (rarely changes)
+const PERSONA = `You are a GTM assistant for Spoki — an expert on our product, ICP, copy strategy, competitive landscape, and outreach playbooks.
 
 Your job is to help commercial team members (SDRs, AEs, BDRs) answer questions about:
 - Who to target and why (ICP, personas, industries)
@@ -17,15 +41,339 @@ Your job is to help commercial team members (SDRs, AEs, BDRs) answer questions a
 - How to handle objections (competitor comparisons, pricing)
 - Which buying signals to look for
 - Market-specific strategies (Italy vs Spain)
-- CRM-validated learnings from 750+ won deals
+- CRM-validated learnings from our won deals
 
 Answer in the same language the person writes in (Italian, Spanish, or English).
 Be concise, direct, and actionable — like a senior colleague answering a quick question.
-Use bullet points when listing options. Keep answers under 200 words unless the question genuinely needs more detail.
+Use bullet points when listing options. Keep answers under 200 words unless the question genuinely needs more detail.`;
 
----
+// ---------------------------------------------------------------------------
+// Knowledge base — fetch from Google Docs with cache
+// ---------------------------------------------------------------------------
 
-## What We Sell
+function getStaticKB() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(CACHE_STATIC_KB);
+  if (cached) return cached;
+
+  const docId = PropertiesService.getScriptProperties().getProperty(PROP_STATIC_DOC_ID);
+  if (!docId) return '[Static KB not configured — run setupBot()]';
+
+  try {
+    const content = DocumentApp.openById(docId).getBody().getText();
+    cache.put(CACHE_STATIC_KB, content, CACHE_TTL_STATIC);
+    return content;
+  } catch (e) {
+    Logger.log('Error fetching static KB: ' + e);
+    return '[Static KB fetch error: ' + e + ']';
+  }
+}
+
+function getDynamicKB() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(CACHE_DYNAMIC_KB);
+  if (cached) return cached;
+
+  const docId = PropertiesService.getScriptProperties().getProperty(PROP_DYNAMIC_DOC_ID);
+  if (!docId) return '';
+
+  try {
+    const content = DocumentApp.openById(docId).getBody().getText();
+    cache.put(CACHE_DYNAMIC_KB, content, CACHE_TTL_DYNAMIC);
+    return content;
+  } catch (e) {
+    Logger.log('Error fetching dynamic KB: ' + e);
+    return '';
+  }
+}
+
+function buildSystemPrompt() {
+  const staticKB  = getStaticKB();
+  const dynamicKB = getDynamicKB();
+  let prompt = PERSONA + '\n\n---\n\n' + staticKB;
+  if (dynamicKB) prompt += '\n\n---\n\n' + dynamicKB;
+  return prompt;
+}
+
+// ---------------------------------------------------------------------------
+// HubSpot sync — runs nightly, writes to Dynamic KB doc
+// ---------------------------------------------------------------------------
+
+function syncHubSpotToDoc() {
+  const token = PropertiesService.getScriptProperties().getProperty(PROP_HUBSPOT_TOKEN);
+  const docId = PropertiesService.getScriptProperties().getProperty(PROP_DYNAMIC_DOC_ID);
+
+  if (!token) { Logger.log('HUBSPOT_API_TOKEN not set in Script Properties.'); return; }
+  if (!docId)  { Logger.log('KB_DYNAMIC_DOC_ID not set. Run setupBot() first.');  return; }
+
+  Logger.log('Starting HubSpot sync...');
+
+  // 90-day cutoff
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+
+  const deals = fetchAllWonDeals(token, cutoff.getTime());
+  Logger.log('Fetched ' + deals.length + ' won deals from last 90 days');
+
+  // Aggregate by industry
+  const byIndustry = {};
+  let totalRevenue = 0;
+
+  deals.forEach(deal => {
+    const industry = (deal.properties.industry || 'Unknown').trim();
+    const amount   = parseFloat(deal.properties.amount)      || 0;
+    const days     = parseInt(deal.properties.days_to_close) || 0;
+
+    if (!byIndustry[industry]) byIndustry[industry] = { count: 0, revenue: 0, totalDays: 0 };
+    byIndustry[industry].count++;
+    byIndustry[industry].revenue    += amount;
+    byIndustry[industry].totalDays  += days;
+    totalRevenue += amount;
+  });
+
+  // Sort by count, take top 15 known industries
+  const sortedIndustries = Object.entries(byIndustry)
+    .filter(([k]) => k !== 'Unknown' && k !== '')
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 15);
+
+  // Top 10 deals by value
+  const topDeals = [...deals]
+    .sort((a, b) => parseFloat(b.properties.amount || 0) - parseFloat(a.properties.amount || 0))
+    .slice(0, 10);
+
+  // Build content
+  const dateStr = Utilities.formatDate(new Date(), 'Europe/Rome', 'yyyy-MM-dd HH:mm');
+
+  let content = `## CRM Live Data — Auto-updated: ${dateStr}\n`;
+  content += `> Auto-generated from HubSpot. Do not edit manually — changes are overwritten nightly.\n\n`;
+
+  content += `### Won Deals Summary (Last 90 Days)\n`;
+  content += `Total: ${deals.length} deals · €${Math.round(totalRevenue).toLocaleString('it-IT')} revenue\n\n`;
+
+  content += `### Won Deals by Industry\n`;
+  sortedIndustries.forEach(([industry, s]) => {
+    const avgAmount = s.count ? Math.round(s.revenue / s.count) : 0;
+    const avgDays   = s.count ? Math.round(s.totalDays / s.count) : 0;
+    content += `- ${industry}: ${s.count} deals · avg €${avgAmount.toLocaleString('it-IT')} · avg ${avgDays} days to close\n`;
+  });
+
+  content += `\n### Top 10 Deals by Value (Last 90 Days)\n`;
+  topDeals.forEach(deal => {
+    const name     = deal.properties.dealname    || 'Unknown';
+    const amount   = parseFloat(deal.properties.amount || 0);
+    const industry = deal.properties.industry    || '—';
+    const days     = deal.properties.days_to_close || '0';
+    const date     = deal.properties.closedate ? deal.properties.closedate.substring(0, 10) : '—';
+    content += `- ${name} — €${amount.toLocaleString('it-IT')} · ${industry} · ${days}d to close · ${date}\n`;
+  });
+
+  // Write to doc (overwrites entirely)
+  const body = DocumentApp.openById(docId).getBody();
+  body.clear();
+  body.appendParagraph(content);
+
+  // Invalidate cache so next message gets fresh data
+  CacheService.getScriptCache().remove(CACHE_DYNAMIC_KB);
+
+  Logger.log('HubSpot sync complete.');
+}
+
+function fetchAllWonDeals(token, cutoffMs) {
+  const url    = 'https://api.hubapi.com/crm/v3/objects/deals/search';
+  const deals  = [];
+  let after    = undefined;
+
+  do {
+    const body = {
+      filterGroups: [{
+        filters: [
+          { propertyName: 'dealstage',  operator: 'IN',  values: CLOSED_WON_STAGES },
+          { propertyName: 'closedate',  operator: 'GTE', value: cutoffMs.toString() }
+        ]
+      }],
+      properties: ['dealname', 'amount', 'closedate', 'days_to_close', 'industry'],
+      sorts: [{ propertyName: 'closedate', direction: 'DESCENDING' }],
+      limit: 100
+    };
+    if (after) body.after = after;
+
+    const resp = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + token },
+      payload: JSON.stringify(body),
+      muteHttpExceptions: true
+    });
+
+    const data = JSON.parse(resp.getContentText());
+    if (data.results) deals.push(...data.results);
+    after = data.paging && data.paging.next ? data.paging.next.after : undefined;
+
+    if (deals.length >= 3000) break; // safety cap
+  } while (after);
+
+  return deals;
+}
+
+// ---------------------------------------------------------------------------
+// Apps Script Chat integration handlers
+// ---------------------------------------------------------------------------
+
+function onMessage(event) {
+  try {
+    // Chat Add-on format: event.chat.messagePayload.message.text
+    const msg = event && event.chat && event.chat.messagePayload && event.chat.messagePayload.message;
+    const userMessage = msg ? (msg.text || msg.argumentText || '') : '';
+    const cleanMessage = userMessage.replace(/<[^>]+>/g, '').trim();
+    const answer = callOpenAI(cleanMessage);
+    return {
+      hostAppDataAction: {
+        chatDataAction: {
+          createMessageAction: {
+            message: { text: answer }
+          }
+        }
+      }
+    };
+  } catch (err) {
+    Logger.log('Error in onMessage: ' + err.toString());
+    return {
+      hostAppDataAction: {
+        chatDataAction: {
+          createMessageAction: {
+            message: { text: '⚠️ Errore interno. Riprova tra un momento.' }
+          }
+        }
+      }
+    };
+  }
+}
+
+function onAddToSpace(event) {
+  return {
+    hostAppDataAction: {
+      chatDataAction: {
+        createMessageAction: {
+          message: {
+            text: '🧠 Benvenuto in Spoki Brain!\n\n' +
+              'Sono il tuo assistente GTM. Chiedimi qualsiasi cosa su:\n' +
+              '• ICP e industrie target\n' +
+              '• Personas e strategie di approccio\n' +
+              '• Copy, oggetti email e CTA\n' +
+              '• Competitor e come batterli\n' +
+              '• Pricing e obiezioni\n' +
+              '• Segnali di acquisto e scoring\n\n' +
+              'Rispondo in italiano, spagnolo o inglese 🚀'
+          }
+        }
+      }
+    }
+  };
+}
+
+function onRemoveFromSpace(event) {
+  // Nothing to do
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI API call
+// ---------------------------------------------------------------------------
+
+function callOpenAI(userMessage) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty(PROP_OPENAI_KEY);
+
+  if (!apiKey) {
+    return '⚠️ API key non configurata. Aggiungi OPENAI_API_KEY nelle Proprietà script.';
+  }
+
+  const payload = {
+    model: OPENAI_MODEL,
+    max_tokens: 1024,
+    messages: [
+      { role: 'system', content: buildSystemPrompt() },
+      { role: 'user',   content: userMessage }
+    ]
+  };
+
+  try {
+    const response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + apiKey },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+
+    const data = JSON.parse(response.getContentText());
+
+    if (data.choices && data.choices[0] && data.choices[0].message) {
+      return data.choices[0].message.content;
+    }
+    if (data.error) {
+      Logger.log('OpenAI error: ' + JSON.stringify(data.error));
+      return '⚠️ Errore API: ' + data.error.message;
+    }
+    return '⚠️ Risposta non valida da OpenAI. Riprova.';
+
+  } catch (err) {
+    Logger.log('Fetch error: ' + err.toString());
+    return '⚠️ Impossibile contattare OpenAI. Controlla la connessione o la API key.';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// One-time setup — run once from the Apps Script editor
+// ---------------------------------------------------------------------------
+
+function setupBot() {
+  const props = PropertiesService.getScriptProperties();
+
+  // 1. Create Static KB Google Doc (seed with current knowledge base)
+  Logger.log('Creating Static KB doc...');
+  const staticDoc  = DocumentApp.create('Spoki Brain — Static Knowledge Base');
+  staticDoc.getBody().clear();
+  staticDoc.getBody().appendParagraph(STATIC_KB_SEED);
+  staticDoc.saveAndClose();
+  props.setProperty(PROP_STATIC_DOC_ID, staticDoc.getId());
+
+  // 2. Create Dynamic KB Google Doc (auto-overwritten by HubSpot sync)
+  Logger.log('Creating Dynamic KB doc...');
+  const dynamicDoc = DocumentApp.create('Spoki Brain — CRM Live Data (auto-updated)');
+  dynamicDoc.getBody().clear();
+  dynamicDoc.getBody().appendParagraph(
+    'CRM Live Data\n\nNot yet synced. Add HUBSPOT_API_TOKEN to Script Properties, then run syncHubSpotToDoc().'
+  );
+  dynamicDoc.saveAndClose();
+  props.setProperty(PROP_DYNAMIC_DOC_ID, dynamicDoc.getId());
+
+  // 3. Set up nightly trigger (2am Rome time)
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'syncHubSpotToDoc')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+
+  ScriptApp.newTrigger('syncHubSpotToDoc')
+    .timeBased()
+    .everyDays(1)
+    .atHour(2)
+    .inTimezone('Europe/Rome')
+    .create();
+
+  Logger.log('=== SETUP COMPLETE ===');
+  Logger.log('Static KB:  https://docs.google.com/document/d/' + staticDoc.getId());
+  Logger.log('Dynamic KB: https://docs.google.com/document/d/' + dynamicDoc.getId());
+  Logger.log('Next steps:');
+  Logger.log('  1. Add HUBSPOT_API_TOKEN to Script Properties');
+  Logger.log('  2. Run syncHubSpotToDoc() to populate live CRM data');
+  Logger.log('  3. Share the Static KB doc with your team for editing');
+}
+
+// ---------------------------------------------------------------------------
+// Static KB seed content — populates the Google Doc on first setup.
+// After that, edit the Google Doc directly. This constant is only used once.
+// ---------------------------------------------------------------------------
+
+const STATIC_KB_SEED = `## What We Sell
 
 Spoki is the Customer Engagement Management (CEM) platform that turns WhatsApp into a powerful channel for marketing, sales, and customer support. Official Meta Business Partner.
 
@@ -204,7 +552,7 @@ Notable clients: Feltrinelli, UniPegaso, Cofidis, Skon Cosmetics, Zuiki, Reental
 
 ---
 
-## CRM-Validated Learnings (from 750+ won deals)
+## CRM-Validated Learnings
 
 Proven outbound channels:
 - Lemlist → Spain already producing wins (Albali Centros de Formación closed from a sequence)
@@ -220,102 +568,3 @@ Time to close:
 Spain: Real Estate (Tempocasa, Percent), Education (Albali, MLA World), Pet (Zampa), Beauty are working. Use Spanish-language sequences.
 Italy: Fashion/Apparel (Nuna Lie, Caleffi), Travel (Gattinoni), Education (Pegaso), Beauty/Wellness (EtnaWellness), Electronics (Expert Mallardo) all proven.
 Pet industry surprise: 3 wins ~€40k total. Fast close (Zampa: 6 days). Pain: high volume of queries, appointment booking, order updates.`;
-
-// ---------------------------------------------------------------------------
-// Main handler — called by Google Chat on every event
-// ---------------------------------------------------------------------------
-function doPost(e) {
-  try {
-    const event = JSON.parse(e.postData.contents);
-
-    if (event.type === 'ADDED_TO_SPACE') {
-      return jsonResponse(
-        '🧠 Benvenuto in Spoki Brain!\n\n' +
-        'Sono il tuo assistente GTM. Chiedimi qualsiasi cosa su:\n' +
-        '• ICP e industrie target\n' +
-        '• Personas e strategie di approccio\n' +
-        '• Copy, oggetti email e CTA\n' +
-        '• Competitor e come batterli\n' +
-        '• Pricing e obiezioni\n' +
-        '• Segnali di acquisto e scoring\n\n' +
-        'Rispondo in italiano, spagnolo o inglese 🚀'
-      );
-    }
-
-    if (event.type === 'MESSAGE') {
-      const userMessage = event.message.text;
-
-      // Strip @mention if the bot is addressed in a Space
-      const cleanMessage = userMessage.replace(/<[^>]+>/g, '').trim();
-
-      const answer = callClaude(cleanMessage);
-      return jsonResponse(answer);
-    }
-
-    return jsonResponse('');
-
-  } catch (err) {
-    Logger.log('Error in doPost: ' + err.toString());
-    return jsonResponse('⚠️ Errore interno. Riprova tra un momento.');
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Call Claude API
-// ---------------------------------------------------------------------------
-function callClaude(userMessage) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
-
-  if (!apiKey) {
-    return '⚠️ API key non configurata. Vai su Progetto > Proprietà script e aggiungi ANTHROPIC_API_KEY.';
-  }
-
-  const payload = {
-    model: CLAUDE_MODEL,
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: [
-      { role: 'user', content: userMessage }
-    ]
-  };
-
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
-    },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-
-  try {
-    const response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', options);
-    const data = JSON.parse(response.getContentText());
-
-    if (data.content && data.content[0] && data.content[0].text) {
-      return data.content[0].text;
-    }
-
-    if (data.error) {
-      Logger.log('Claude API error: ' + JSON.stringify(data.error));
-      return '⚠️ Errore API: ' + data.error.message;
-    }
-
-    return '⚠️ Risposta non valida da Claude. Riprova.';
-
-  } catch (err) {
-    Logger.log('Fetch error: ' + err.toString());
-    return '⚠️ Impossibile contattare Claude. Controlla la connessione o la API key.';
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Helper — return a properly formatted Google Chat JSON response
-// ---------------------------------------------------------------------------
-function jsonResponse(text) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ text: text }))
-    .setMimeType(ContentService.MimeType.JSON);
-}

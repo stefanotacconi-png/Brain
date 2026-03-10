@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spoki Sales Cockpit</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d1117;
+      --card:    #161b22;
+      --border:  #30363d;
+      --text:    #c9d1d9;
+      --muted:   #8b949e;
+      --blue:    #58a6ff;
+      --green:   #3fb950;
+      --yellow:  #d29922;
+      --red:     #f85149;
+      --orange:  #db6d28;
+      --purple:  #bc8cff;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.4px; }
+    header h1 span { color: var(--green); }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    #updated-at  { color: var(--muted); font-size: 12px; }
+    #refresh-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: border-color 0.15s;
+    }
+    #refresh-btn:hover   { border-color: var(--blue); color: var(--blue); }
+    #refresh-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Layout ── */
+    main { padding: 20px 24px; max-width: 1500px; margin: 0 auto; }
+
+    /* ── KPI Cards ── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .kpi-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+    .kpi-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .kpi-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .kpi-sub b { color: var(--text); }
+
+    .kpi-green  { border-top: 3px solid var(--green); }
+    .kpi-blue   { border-top: 3px solid var(--blue); }
+    .kpi-yellow { border-top: 3px solid var(--yellow); }
+    .kpi-purple { border-top: 3px solid var(--purple); }
+
+    /* ── Section ── */
+    section { margin-bottom: 20px; }
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: #0d1117;
+      padding: 9px 14px;
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    thead th.num { text-align: right; }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    tbody td { padding: 10px 14px; vertical-align: middle; }
+    tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .rank      { color: var(--muted); font-size: 12px; width: 24px; }
+    .rep-name  { font-weight: 500; }
+    .won-val   { color: var(--green); font-weight: 600; }
+    .open-val  { color: var(--blue); }
+    .new-deals { color: var(--purple); font-weight: 600; }
+    .avg-size  { color: var(--muted); font-size: 12px; }
+
+    .win-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .win-high { background: rgba(63,185,80,0.15);  color: var(--green); }
+    .win-mid  { background: rgba(210,153,34,0.15); color: var(--yellow); }
+    .win-low  { background: rgba(248,81,73,0.15);  color: var(--red); }
+    .win-null { color: var(--muted); font-size: 12px; }
+
+    /* ── Two-col ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Charts ── */
+    .chart-wrap { padding: 20px; }
+    .chart-wrap.tall { height: 260px; display: flex; align-items: center; }
+
+    /* ── Lists (wins / stale) ── */
+    .item-list { list-style: none; }
+    .item-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+    }
+    .item-list li:last-child { border-bottom: none; }
+    .item-name {
+      font-weight: 500;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .item-name a { color: var(--text); text-decoration: none; }
+    .item-name a:hover { color: var(--blue); }
+    .item-meta { display: flex; gap: 12px; align-items: center; flex-shrink: 0; }
+    .meta-owner  { color: var(--muted); font-size: 12px; }
+    .meta-date   { color: var(--muted); font-size: 12px; }
+    .meta-amount { color: var(--green); font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .meta-stage  {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(139,148,158,0.12);
+      color: var(--muted);
+    }
+    .meta-days-warn { color: var(--yellow); font-size: 12px; font-weight: 600; }
+    .meta-days-crit { color: var(--red);    font-size: 12px; font-weight: 600; }
+
+    /* ── At Risk ── */
+    .card-risk {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--red);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .risk-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    .risk-overdue { background: rgba(248,81,73,0.15);  color: var(--red); }
+    .risk-cold    { background: rgba(219,109,40,0.15); color: var(--orange); }
+    .risk-reasons { flex-shrink: 0; }
+
+    /* ── Section title variants ── */
+    .section-title-risk {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--red);
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    /* ── Source Mix Bar ── */
+    .src-wrap   { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+    .src-bar    { display: flex; height: 10px; border-radius: 3px; overflow: hidden; gap: 1px; width: 150px; }
+    .src-seg    { cursor: default; }
+    .src-legend { font-size: 10px; white-space: nowrap; }
+    .src-inbound    { background: rgba(88,166,255,0.55);  }
+    .src-outbound   { background: rgba(219,109,40,0.55);  }
+    .src-productled { background: rgba(63,185,80,0.55);   }
+    .src-partner    { background: rgba(188,140,255,0.55); }
+    .lbl-ib { color: #58a6ff; font-weight: 700; }
+    .lbl-ob { color: #db6d28; font-weight: 700; }
+    .lbl-pl { color: #3fb950; font-weight: 700; }
+    .lbl-pa { color: #bc8cff; font-weight: 700; }
+
+    /* ── Empty / loading ── */
+    .empty   { text-align: center; color: var(--muted); padding: 28px; font-size: 13px; }
+    .loading { color: var(--muted); padding: 24px; text-align: center; }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .skeleton {
+      animation: pulse 1.4s ease-in-out infinite;
+      background: var(--border);
+      border-radius: 4px;
+      height: 1em;
+      display: inline-block;
+      width: 80px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Spoki <span>Sales Cockpit</span></h1>
+  <div class="header-right">
+    <span id="updated-at">Loading…</span>
+    <button id="refresh-btn" onclick="refreshAll()">&#8635; Refresh</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── KPI Cards ── -->
+  <div class="kpi-grid">
+    <div class="kpi-card kpi-green">
+      <div class="kpi-label">Open Pipeline — Closing This Month</div>
+      <div class="kpi-value" id="kpi-pipeline"><span class="skeleton"></span></div>
+      <div class="kpi-sub" id="kpi-pipeline-sub">— deals · wtd —</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+      <div class="kpi-label">Won This Month</div>
+      <div class="kpi-value" id="kpi-won"><span class="skeleton"></span></div>
+      <div class="kpi-sub" id="kpi-won-sub">— deals closed</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+      <div class="kpi-label">Win Rate (MTD)</div>
+      <div class="kpi-value" id="kpi-winrate"><span class="skeleton"></span></div>
+      <div class="kpi-sub" id="kpi-winrate-sub">— / — closed</div>
+    </div>
+    <div class="kpi-card kpi-purple">
+      <div class="kpi-label">Total Open Pipeline</div>
+      <div class="kpi-value" id="kpi-closing"><span class="skeleton"></span></div>
+      <div class="kpi-sub" id="kpi-closing-sub">— deals across all stages</div>
+    </div>
+  </div>
+
+  <!-- ── Leaderboard ── -->
+  <section>
+    <div class="section-title">Leaderboard — Month to Date</div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Rep</th>
+            <th class="num" title="Deals opened this month — are they feeding the pipeline?">New Deals ↑</th>
+            <th class="num">Won #</th>
+            <th class="num">Won €</th>
+            <th class="num" title="Won € ÷ deals won — are they qualifying up or down?">Avg Deal €</th>
+            <th class="num">Open #</th>
+            <th class="num">Open Pipeline €</th>
+            <th class="num">Win Rate</th>
+            <th class="num" title="Average days from deal creation to close (won deals this month)">Avg Days to Close</th>
+            <th class="num" title="Source mix of open pipeline deals">Source Mix (open pipe)</th>
+          </tr>
+        </thead>
+        <tbody id="lb-body">
+          <tr><td colspan="11" class="loading">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Weekly Trend ── -->
+  <section>
+    <div class="section-title">Weekly Momentum — Won Deals (last 8 weeks)</div>
+    <div class="card">
+      <div class="chart-wrap" style="height:220px; display:flex; align-items:center;">
+        <canvas id="trend-chart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Funnel + Recent Wins ── -->
+  <div class="two-col">
+    <div>
+      <div class="section-title">Pipeline Funnel</div>
+      <div class="card">
+        <div class="chart-wrap tall">
+          <canvas id="funnel-chart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">Recent Wins</div>
+      <div class="card">
+        <ul class="item-list" id="wins-list">
+          <li><span class="loading">Loading…</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── At Risk ── -->
+  <section>
+    <div class="section-title-risk">&#9888; Deals at Risk — Past Due or Late Stage Going Cold</div>
+    <div class="card-risk">
+      <ul class="item-list" id="risk-list">
+        <li><span class="loading">Loading…</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── Activity ── -->
+  <section>
+    <div class="section-title">Team Activity — Cold Calls (Lemlist)</div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Rep</th>
+            <th class="num" title="Cold calls completed in the last 7 days (Lemlist)">Calls 7D</th>
+            <th class="num" title="Leads marked Interested from a call in the last 7 days">Opps 7D</th>
+            <th class="num" title="Meetings recorded in Fathom in the last 7 days">Meetings 7D</th>
+          </tr>
+        </thead>
+        <tbody id="activity-body">
+          <tr><td colspan="5" class="loading">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Stale Deals ── -->
+  <section>
+    <div class="section-title">Stale Deals — No Activity in 7+ Days</div>
+    <div class="card">
+      <ul class="item-list" id="stale-list">
+        <li><span class="loading">Loading…</span></li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // ── Formatters ────────────────────────────────────────────────────────────────
+  const _eur = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  const fmtEur = v => _eur.format(v);
+  const fmtK   = v => {
+    if (!v) return '—';
+    if (v >= 1000) return '€' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'k';
+    return '€' + Math.round(v);
+  };
+
+  // ── Charts ────────────────────────────────────────────────────────────────────
+  let funnelChart = null;
+  let trendChart  = null;
+
+  // ── Fetch ─────────────────────────────────────────────────────────────────────
+  const fetchJSON = async url => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${url} → ${res.status}`);
+    return res.json();
+  };
+
+  // ── Summary ───────────────────────────────────────────────────────────────────
+  async function loadSummary() {
+    const d = await fetchJSON('/api/summary');
+    document.getElementById('kpi-pipeline').textContent = fmtK(d.closing_this_month_value);
+    document.getElementById('kpi-pipeline-sub').innerHTML =
+      `<b>${d.closing_this_month}</b> deals · wtd <b>${fmtK(d.closing_this_month_wtd)}</b>`;
+    document.getElementById('kpi-won').textContent = fmtK(d.won_value_month);
+    document.getElementById('kpi-won-sub').innerHTML =
+      `<b>${d.won_count_month}</b> deals · <b>${d.won_count_week}</b> this week (${fmtK(d.won_value_week)})`;
+    document.getElementById('kpi-winrate').textContent = d.win_rate + '%';
+    document.getElementById('kpi-winrate-sub').innerHTML =
+      `<b>${d.won_count_month}</b> won / <b>${d.total_closed}</b> closed`;
+    document.getElementById('kpi-closing').textContent = fmtK(d.total_pipeline);
+    document.getElementById('kpi-closing-sub').innerHTML =
+      `<b>${d.open_count}</b> deals across all stages`;
+    document.getElementById('updated-at').textContent = 'Updated ' + d.fetched_at;
+  }
+
+  // ── Leaderboard ───────────────────────────────────────────────────────────────
+  function winPill(rate) {
+    if (rate === null || rate === undefined) return '<span class="win-null">—</span>';
+    const cls = rate >= 60 ? 'win-high' : rate >= 35 ? 'win-mid' : 'win-low';
+    return `<span class="win-pill ${cls}">${rate}%</span>`;
+  }
+
+  function sourceMix(sources) {
+    if (!sources) return '<span class="win-null">—</span>';
+    const defs = [
+      { key: 'Inbound',     label: 'IB', cls: 'src-inbound',    lcls: 'lbl-ib' },
+      { key: 'Outbound',    label: 'OB', cls: 'src-outbound',   lcls: 'lbl-ob' },
+      { key: 'product_led', label: 'PL', cls: 'src-productled', lcls: 'lbl-pl' },
+      { key: 'partner',     label: 'PA', cls: 'src-partner',    lcls: 'lbl-pa' },
+    ];
+    const total = defs.reduce((s, d) => s + (sources[d.key] || 0), 0);
+    if (!total) return '<span class="win-null">—</span>';
+    const active = defs.filter(d => sources[d.key] > 0);
+    const bar = active.map(d => {
+      const pct = Math.round((sources[d.key] / total) * 100);
+      return `<div class="src-seg ${d.cls}" style="flex:${sources[d.key]}" title="${d.key}: ${pct}% (${sources[d.key]} deals)"></div>`;
+    }).join('');
+    const legend = active.map(d => {
+      const pct = Math.round((sources[d.key] / total) * 100);
+      return `<span class="${d.lcls}">${d.label}</span>&thinsp;${pct}%`;
+    }).join(' <span style="color:var(--border)">·</span> ');
+    return `<div class="src-wrap"><div class="src-bar">${bar}</div><div class="src-legend">${legend}</div></div>`;
+  }
+
+  async function loadLeaderboard() {
+    const reps  = await fetchJSON('/api/leaderboard');
+    const tbody = document.getElementById('lb-body');
+    if (!reps.length) {
+      tbody.innerHTML = '<tr><td colspan="11" class="empty">No data</td></tr>';
+      return;
+    }
+    tbody.innerHTML = reps.map((r, i) => `
+      <tr>
+        <td class="rank">${i + 1}</td>
+        <td class="rep-name">${r.name}</td>
+        <td class="num new-deals">${r.new_deals > 0 ? r.new_deals : '<span style="color:var(--red)">0</span>'}</td>
+        <td class="num">${r.won_count}</td>
+        <td class="num won-val">${r.won_value > 0 ? fmtK(r.won_value) : '—'}</td>
+        <td class="num avg-size">${r.avg_deal_size ? fmtK(r.avg_deal_size) : '—'}</td>
+        <td class="num">${r.open_count}</td>
+        <td class="num open-val">${r.open_value > 0 ? fmtK(r.open_value) : '—'}</td>
+        <td class="num">${winPill(r.win_rate)}</td>
+        <td class="num" style="color:var(--muted); font-size:12px;">${r.avg_days_to_close != null ? r.avg_days_to_close + 'd' : '—'}</td>
+        <td class="num">${sourceMix(r.sources)}</td>
+      </tr>
+    `).join('');
+  }
+
+  // ── Weekly Trend ──────────────────────────────────────────────────────────────
+  async function loadWeeklyTrend() {
+    const weeks = await fetchJSON('/api/weekly-trend');
+    if (trendChart) trendChart.destroy();
+
+    const labels = weeks.map(w => w.label);
+    const counts = weeks.map(w => w.count);
+    const values = weeks.map(w => w.value);
+    const maxCount = Math.max(...counts, 1);
+
+    // Colour bars by relative performance: top 25% = green, bottom 25% = red, else blue
+    const colors = counts.map(c => {
+      if (c >= maxCount * 0.75) return '#3fb950aa';
+      if (c <= maxCount * 0.25 && maxCount > 1) return '#f8514988';
+      return '#58a6ff88';
+    });
+    const borderColors = counts.map(c => {
+      if (c >= maxCount * 0.75) return '#3fb950';
+      if (c <= maxCount * 0.25 && maxCount > 1) return '#f85149';
+      return '#58a6ff';
+    });
+
+    trendChart = new Chart(document.getElementById('trend-chart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Deals won',
+          data: counts,
+          backgroundColor: colors,
+          borderColor:     borderColors,
+          borderWidth: 1.5,
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = values[ctx.dataIndex];
+                return `  ${ctx.raw} deals · ${new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(v)}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
+          y: {
+            grid:  { color: '#30363d' },
+            ticks: { color: '#8b949e', stepSize: 1, precision: 0 },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+  }
+
+  // ── Funnel Chart ──────────────────────────────────────────────────────────────
+  async function loadFunnel() {
+    const stages = await fetchJSON('/api/funnel');
+    if (funnelChart) funnelChart.destroy();
+
+    funnelChart = new Chart(document.getElementById('funnel-chart'), {
+      type: 'bar',
+      data: {
+        labels: stages.map(s => s.stage),
+        datasets: [{
+          label: 'Deals',
+          data:  stages.map(s => s.count),
+          backgroundColor: ['#58a6ff44','#3fb95044','#d2992244','#bc8cff44'],
+          borderColor:     ['#58a6ff',  '#3fb950',  '#d29922',  '#bc8cff'],
+          borderWidth: 1.5,
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = stages[ctx.dataIndex].value;
+                return `  ${ctx.raw} deals · ${new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(v)}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
+          y: { grid: { display: false },  ticks: { color: '#c9d1d9', font: { size: 12 } } },
+        },
+      },
+    });
+  }
+
+  // ── Recent Wins ───────────────────────────────────────────────────────────────
+  async function loadWins() {
+    const wins = await fetchJSON('/api/recent-wins');
+    const ul   = document.getElementById('wins-list');
+    if (!wins.length) {
+      ul.innerHTML = '<li class="empty">No wins this month yet</li>';
+      return;
+    }
+    ul.innerHTML = wins.map(w => `
+      <li>
+        <div class="item-name"><a href="${w.url}" target="_blank">${w.name}</a></div>
+        <div class="item-meta">
+          <span class="meta-owner">${w.owner}</span>
+          <span class="meta-date">${w.closedate}</span>
+          <span class="meta-amount">${w.amount > 0 ? fmtK(w.amount) : '—'}</span>
+        </div>
+      </li>
+    `).join('');
+  }
+
+  // ── At Risk ───────────────────────────────────────────────────────────────────
+  async function loadAtRisk() {
+    const deals = await fetchJSON('/api/at-risk');
+    const ul    = document.getElementById('risk-list');
+    if (!deals.length) {
+      ul.innerHTML = '<li class="empty" style="color:var(--green)">No at-risk deals — looking clean!</li>';
+      return;
+    }
+    ul.innerHTML = deals.map(d => {
+      const pills = d.reasons.map(r => {
+        const cls = r.type === 'overdue' ? 'risk-overdue' : 'risk-cold';
+        return `<span class="risk-pill ${cls}">${r.label}</span>`;
+      }).join('');
+      return `
+        <li>
+          <div class="item-name"><a href="${d.url}" target="_blank">${d.name}</a></div>
+          <div class="item-meta">
+            <span class="meta-stage">${d.stage}</span>
+            <span class="meta-owner">${d.owner}</span>
+            <span class="meta-amount">${d.amount > 0 ? fmtK(d.amount) : '—'}</span>
+            <div class="risk-reasons">${pills}</div>
+          </div>
+        </li>
+      `;
+    }).join('');
+  }
+
+  // ── Activity ──────────────────────────────────────────────────────────────────
+  async function loadActivity() {
+    const rows  = await fetchJSON('/api/activity');
+    const tbody = document.getElementById('activity-body');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No activity data</td></tr>';
+      return;
+    }
+    const max = rows[0].calls_7d || 1;
+    tbody.innerHTML = rows.map((r, i) => {
+      const barW = Math.round((r.calls_7d / max) * 80);
+      const callBar = r.calls_7d > 0
+        ? `<div style="display:inline-flex;align-items:center;gap:8px;">
+             <div style="width:${barW}px;height:8px;background:rgba(88,166,255,0.5);border-radius:3px;"></div>
+             <span style="color:var(--blue);font-weight:600;">${r.calls_7d}</span>
+           </div>`
+        : '<span style="color:var(--muted)">—</span>';
+      return `
+        <tr>
+          <td class="rank">${i + 1}</td>
+          <td class="rep-name">${r.name}</td>
+          <td class="num">${callBar}</td>
+          <td class="num">${r.opps_7d > 0 ? `<span style="color:var(--green);font-weight:600;">${r.opps_7d}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+          <td class="num">${r.meetings_7d > 0 ? `<span style="color:var(--purple,#c792ea);font-weight:600;">${r.meetings_7d}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // ── Stale Deals ───────────────────────────────────────────────────────────────
+  async function loadStale() {
+    const deals = await fetchJSON('/api/stale');
+    const ul    = document.getElementById('stale-list');
+    if (!deals.length) {
+      ul.innerHTML = '<li class="empty">No stale deals!</li>';
+      return;
+    }
+    ul.innerHTML = deals.map(d => {
+      const daysCls = d.days_stale >= 14 ? 'meta-days-crit' : 'meta-days-warn';
+      return `
+        <li>
+          <div class="item-name"><a href="${d.url}" target="_blank">${d.name}</a></div>
+          <div class="item-meta">
+            <span class="meta-stage">${d.stage}</span>
+            <span class="meta-owner">${d.owner}</span>
+            <span class="meta-amount">${d.amount > 0 ? fmtK(d.amount) : '—'}</span>
+            <span class="${daysCls}">${d.days_stale}d idle</span>
+          </div>
+        </li>
+      `;
+    }).join('');
+  }
+
+  // ── Refresh ───────────────────────────────────────────────────────────────────
+  async function loadAll() {
+    await Promise.all([
+      loadSummary(),
+      loadLeaderboard(),
+      loadWeeklyTrend(),
+      loadFunnel(),
+      loadWins(),
+      loadAtRisk(),
+      loadActivity(),
+      loadStale(),
+    ]);
+  }
+
+  async function refreshAll() {
+    const btn = document.getElementById('refresh-btn');
+    btn.disabled = true;
+    btn.textContent = '…';
+    document.getElementById('updated-at').textContent = 'Refreshing…';
+    try {
+      await fetch('/api/refresh', { method: 'POST' });
+      await loadAll();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '↻ Refresh';
+    }
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
+  loadAll();
+  setInterval(refreshAll, 5 * 60 * 1000);
+</script>
+</body>
+</html>

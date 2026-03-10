@@ -20,7 +20,7 @@ Then run each stage sequentially, reporting progress after each:
 ---
 
 ### Stage 1 — ICP Scoring
-- Run the logic from `/icp-score` skill
+- Run the logic from `/score-and-segment` skill (quick mode)
 - Score all companies, assign tiers
 - Save to `/output/scored_[date].csv`
 - Report: Tier breakdown summary

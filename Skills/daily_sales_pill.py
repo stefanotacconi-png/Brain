@@ -19,14 +19,18 @@ import sys
 import argparse
 
 # ─── Config ───────────────────────────────────────────────────────────────────
-HUBSPOT_TOKEN  = "YOUR_HUBSPOT_TOKEN"
-LEMLIST_KEY    = "YOUR_LEMLIST_API_KEY"
-FATHOM_KEY     = "YOUR_FATHOM_API_KEY"
+HUBSPOT_TOKEN  = os.getenv("HUBSPOT_TOKEN", "")
+LEMLIST_KEY    = os.getenv("LEMLIST_KEY", "")
+FATHOM_KEY     = os.getenv("FATHOM_KEY", "")
 ANTHROPIC_KEY  = os.getenv("ANTHROPIC_API_KEY", "")   # set in crontab or shell profile
 OPENAI_KEY     = os.getenv("OPENAI_API_KEY", "")      # alternative — uses gpt-4o-mini
 # Keywords that flag post-sale calls (scored lower in rep scorecard)
 _POST_SALE_KW  = ("onboarding", "training", "activation", "activación",
                   "activacion", "formazione", "ativação", "llamada de activación")
+# Keywords that flag internal meetings — skip entirely from Best Call
+_INTERNAL_KW   = ("spoki team", "team meeting", "internal",
+                  "1:1", "one on one", "sync", "standup", "stand-up",
+                  "riunione", "weekly", "planning", "retrospective")
 GOOGLE_CHAT_WEBHOOK = (
     "https://chat.googleapis.com/v1/spaces/AAQAhq1kBCw/messages"
     "?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI"
@@ -42,14 +46,26 @@ STAGES = {
     "986053470": "Closed Lost",
 }
 OWNERS = {
+    # Italy sales
     "75722736": "Cristina",
     "75722777": "Giuseppe",
-    "30727447": "Víctor",
     "31172513": "Marco",
     "30334309": "Vincenzo",
     "31903434": "Bruno",
+    "78556068": "Davide",
+    "31766930": "G. Cannistraro",
+    "29272207": "Greta",
+    # Spain / international sales
+    "30727447": "Víctor",
     "30908030": "Manuel",
+    "30662769": "Juan Manuel",
+    "29797105": "Ana",
+    "31920640": "Alejandro",
+    "32297908": "Jordi",
+    "87805147": "Andres",
+    # Other / management
     "31012966": "Stefano",
+    "29426066": "Federica",
 }
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -58,6 +74,17 @@ def fmt_eur(value):
         return f"€{int(float(value)):,}".replace(",", ".")
     except Exception:
         return "€0"
+
+def fmt_k(value):
+    """Format as €Xk or €X.Xk for compact inline use."""
+    try:
+        v = float(value)
+        if v >= 1000:
+            k = round(v / 1000, 1)
+            return f"€{k:.0f}k" if k == int(k) else f"€{k:.1f}k"
+        return f"€{int(v)}"
+    except Exception:
+        return "€?"
 
 
 def fmt_date(iso_str):
@@ -68,6 +95,15 @@ def fmt_date(iso_str):
         return dt.strftime("%d %b")
     except Exception:
         return iso_str[:10]
+
+
+def _week_start_ms():
+    """Monday 00:00 Europe/Rome of the current week, as Unix ms (for HubSpot filters)."""
+    from zoneinfo import ZoneInfo
+    now_rome = datetime.now(ZoneInfo("Europe/Rome"))
+    monday   = now_rome - timedelta(days=now_rome.weekday())   # weekday(): 0=Mon
+    midnight = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(midnight.astimezone(timezone.utc).timestamp() * 1000)
 
 
 def owner_name(owner_id):
@@ -108,6 +144,61 @@ def send_to_gchat(text):
     )
     with urllib.request.urlopen(req) as r:
         return json.loads(r.read())
+
+
+OBSIDIAN_PILLS_DIR = os.path.expanduser(
+    "~/Documents/Vault Brain/GTM/Sales Pills"
+)
+
+DAY_TOPICS = {
+    "monday":    "🧹 Data Hygiene",
+    "tuesday":   "🌱 New Pipeline Feed",
+    "wednesday": "🔥 Big Deal Push",
+    "thursday":  "⏱ Stage Velocity",
+    "friday":    "🏆 Week Recap",
+}
+
+
+def log_to_obsidian(day_label, message):
+    """Append the sent pill to an Obsidian daily log file."""
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Europe/Rome"))
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H:%M")
+        topic    = DAY_TOPICS.get(day_label, day_label.capitalize())
+
+        # One file per week: Sales Pills/YYYY-Www.md
+        week_str  = now.strftime("%Y-W%V")
+        log_path  = os.path.join(OBSIDIAN_PILLS_DIR, f"{week_str}.md")
+
+        # Strip Google Chat bold/italic markers for clean markdown
+        clean = message.replace("*", "**").replace("_", "*")
+
+        entry = (
+            f"\n---\n\n"
+            f"## {date_str} · {time_str} — {topic}\n\n"
+            f"{clean}\n"
+        )
+
+        os.makedirs(OBSIDIAN_PILLS_DIR, exist_ok=True)
+
+        # Add file header on first write
+        if not os.path.exists(log_path):
+            header = (
+                f"# Sales Pills — Week {week_str}\n\n"
+                f"Auto-logged by `daily_sales_pill.py`.\n"
+                f"← [[sales-pill-system|System docs]]\n"
+            )
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write(header)
+
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(entry)
+
+        print(f"📓 Logged to Obsidian: {log_path}")
+    except Exception as e:
+        print(f"⚠️  Obsidian log failed (non-fatal): {e}")
 
 
 # ─── Fathom + Claude helpers ──────────────────────────────────────────────────
@@ -165,6 +256,9 @@ def fathom_best_call_this_week(top_n=3):
         if dur < 5:
             continue
         title_lower = (m.get("meeting_title") or m.get("title") or "").lower()
+        # Skip internal meetings entirely
+        if any(kw in title_lower for kw in _INTERNAL_KW):
+            continue
         is_post_sale = any(kw in title_lower for kw in _POST_SALE_KW)
         candidates.append({
             **m,
@@ -271,11 +365,13 @@ def fathom_rep_scorecard(candidates):
     computes talk ratio, then runs AI analysis. Fast: 2 API calls total.
     """
     if not candidates:
-        return ["*📞 Best Call of the Week*", "_No recorded sales calls this week._"]
+        return ["📞 Best Call → _No recorded sales calls this week._", ""]
 
     best_call  = candidates[0]   # already sorted by score
     rep_info   = best_call.get("recorded_by") or {}
     rep_name   = rep_info.get("name") or "?"
+    # Normalise to first name for consistency with rest of the pill
+    rep_name_display = rep_name.split()[0] if rep_name != "?" else "?"
     best_dur   = best_call["_dur_min"]
     best_title = (best_call.get("meeting_title") or best_call.get("title") or "Call").strip()
     best_share = best_call.get("share_url") or ""
@@ -303,9 +399,7 @@ def fathom_rep_scorecard(candidates):
         ratio_str = f"*{rep_pct}%* rep · {prospect_pct}% prospect{flag}"
 
     lines = [
-        f"*📞 Best Call of the Week*",
-        f"*{rep_name}* — _{best_title}_ ({best_dur} min)",
-        f"",
+        f"📞 Best Call → {rep_name_display} · {best_title} · {best_dur} min",
         f"🗣 Talk ratio: {ratio_str}",
     ]
 
@@ -421,43 +515,66 @@ def pill_monday():
 
 
 def pill_tuesday():
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    overdue = hs_search(
+    week_start = _week_start_ms()   # Monday 00:00 Rome — excludes last week's deals
+    new_deals = hs_search(
         filters=[
             {"propertyName": "pipeline", "operator": "EQ", "value": PIPELINE_ID},
+            {"propertyName": "createdate", "operator": "GT",
+             "value": str(week_start)},
             {"propertyName": "dealstage", "operator": "NOT_IN",
              "values": ["986053469", "986053470"]},
-            {"propertyName": "closedate", "operator": "LT", "value": str(now_ms)},
-            {"propertyName": "amount", "operator": "GT", "value": "0"},
         ],
-        sorts=[{"propertyName": "amount", "direction": "DESCENDING"}],
-        properties=["dealname", "dealstage", "amount", "closedate", "hubspot_owner_id"],
-        limit=6,
+        sorts=[{"propertyName": "createdate", "direction": "DESCENDING"}],
+        properties=["dealname", "dealstage", "amount", "createdate", "hubspot_owner_id"],
+        limit=10,
     )
 
-    lines = ["hey team, today's tips & focus 📅",
-             "",
-             "*📅 Tuesday — Overdue Close Dates*",
-             "Deals with past close dates = blocked pipeline.",
-             "",
-             "*🔥 Top deals to unblock now:*"]
+    results = new_deals.get("results", [])
+    total   = new_deals.get("total", 0)
 
-    for d in overdue.get("results", [])[:6]:
-        p = d["properties"]
-        lines.append(
-            f"• *{p['dealname']}* — {fmt_eur(p.get('amount'))} — "
-            f"{stage_name(p['dealstage'])}"
-        )
-        lines.append(
-            f"  ↳ Overdue {fmt_date(p.get('closedate'))} → "
-            f"*{owner_name(p.get('hubspot_owner_id',''))}*, reschedule or close"
-        )
+    # Group by rep
+    by_rep = {}
+    for d in results:
+        p   = d["properties"]
+        rep = owner_name(p.get("hubspot_owner_id", ""))
+        by_rep.setdefault(rep, []).append(p)
 
-    total = overdue.get("total", 0)
+    lines = ["hey team, today's tips & focus 🌱",
+             "",
+             "*🌱 Tuesday — New Pipeline This Week*",
+             "Fresh deals entered the funnel. Make sure each has a next step.",
+             ""]
+
+    if not results:
+        lines.append(
+            "_No new deals created this week yet — let's get prospecting!_ 📞"
+        )
+    else:
+        total_value = sum(float(d["properties"].get("amount") or 0) for d in results)
+        value_str   = f" — {fmt_eur(total_value)} potential" if total_value > 0 else ""
+        lines.append(
+            f"*{total} new deal{'s' if total != 1 else ''} this week{value_str}:*"
+        )
+        lines.append("")
+        for rep, deals in sorted(by_rep.items()):
+            rep_total  = sum(float(p.get("amount") or 0) for p in deals)
+            rep_val_str = f" · {fmt_k(rep_total)}" if rep_total > 0 else ""
+            deal_list  = " · ".join(
+                f"{p['dealname']} "
+                f"({'TBD' if not p.get('amount') else fmt_k(p.get('amount'))}"
+                f" · {stage_name(p['dealstage'])})"
+                for p in deals[:3]
+            )
+            suffix = f" +{len(deals)-3} more" if len(deals) > 3 else ""
+            lines.append(
+                f"• *{rep}* — {len(deals)} deal{'s' if len(deals)!=1 else ''}{rep_val_str}"
+            )
+            lines.append(f"  ↳ {deal_list}{suffix}")
+
     lines.append("")
     lines.append(
-        f"💡 *{total} deals with past close dates* — "
-        "2 min to update each deal = clean forecast. Let's do it today! 💪"
+        "💡 New deal without a next step = lost deal. "
+        "Define the next action for each one today! 📋"
     )
     return "\n".join(lines)
 
@@ -507,9 +624,8 @@ def pill_wednesday():
 
 
 def pill_thursday():
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    thirty_days_ago = int(
-        (datetime.now(timezone.utc) - timedelta(days=30)).timestamp() * 1000
+    fourteen_days_ago = int(
+        (datetime.now(timezone.utc) - timedelta(days=14)).timestamp() * 1000
     )
 
     def days_since(iso_str):
@@ -521,105 +637,75 @@ def pill_thursday():
         except Exception:
             return "?"
 
-    frozen = hs_search(
-        filters=[
-            {"propertyName": "pipeline", "operator": "EQ", "value": PIPELINE_ID},
-            {"propertyName": "dealstage", "operator": "IN",
-             "values": ["986053466", "986053467", "986053468"]},
-            {"propertyName": "hs_lastmodifieddate", "operator": "LT",
-             "value": str(thirty_days_ago)},
-            {"propertyName": "amount", "operator": "GT", "value": "0"},
-        ],
-        sorts=[{"propertyName": "amount", "direction": "DESCENDING"}],
-        properties=["dealname", "dealstage", "amount", "hubspot_owner_id",
-                    "hs_lastmodifieddate"],
-        limit=6,
-    )
-
-    total_frozen = frozen.get("total", 0)
-
-    # ── Case 1: frozen deals exist — show them ────────────────────────────────
-    if total_frozen > 0:
-        lines = ["hey team, today's tips & focus 🧊",
-                 "",
-                 "*🧊 Thursday — Frozen Deals: Time to Unblock!*",
-                 "Deals with no updates for 30+ days = ghost pipeline.",
-                 "",
-                 "*💤 Top deals to revive:*"]
-        for d in frozen.get("results", [])[:6]:
-            p = d["properties"]
-            days = days_since(p.get("hs_lastmodifieddate"))
-            lines.append(
-                f"• *{p['dealname']}* — {fmt_eur(p.get('amount'))} — "
-                f"{stage_name(p['dealstage'])}"
-            )
-            lines.append(
-                f"  ↳ Stuck for *{days} days* → "
-                f"*{owner_name(p.get('hubspot_owner_id',''))}*, re-engage or close"
-            )
-        lines.append("")
-        lines.append(
-            f"💡 *{total_frozen} frozen deals* — "
-            "A 3-line email or a 5-min call can unblock them. Good luck! 🎯"
-        )
-        return "\n".join(lines)
-
-    # ── Case 2: pipeline is clean — pivot to closing push ─────────────────────
-    # Show biggest open deals with close date still in the future
-    closing_soon = hs_search(
+    stuck = hs_search(
         filters=[
             {"propertyName": "pipeline", "operator": "EQ", "value": PIPELINE_ID},
             {"propertyName": "dealstage", "operator": "IN",
              "values": ["986053466", "986053467", "986053468", "2674750700"]},
-            {"propertyName": "closedate", "operator": "GT", "value": str(now_ms)},
+            {"propertyName": "hs_lastmodifieddate", "operator": "LT",
+             "value": str(fourteen_days_ago)},
             {"propertyName": "amount", "operator": "GT", "value": "0"},
         ],
         sorts=[{"propertyName": "amount", "direction": "DESCENDING"}],
-        properties=["dealname", "dealstage", "amount", "closedate",
-                    "hubspot_owner_id", "hs_next_step"],
-        limit=6,
+        properties=["dealname", "dealstage", "amount", "hubspot_owner_id",
+                    "hs_lastmodifieddate", "hs_next_step"],
+        limit=7,
     )
 
-    lines = ["hey team, today's tips & focus 💪",
-             "",
-             "*✅ Thursday — Pipeline is clean, zero frozen deals!*",
-             "No ghost deals — the team is on top of things. "
-             "Now let's push the biggest open deals to close.",
-             "",
-             "*🎯 Top open deals to push:*"]
+    total_stuck = stuck.get("total", 0)
+    results     = stuck.get("results", [])
 
-    for d in closing_soon.get("results", [])[:6]:
-        p = d["properties"]
-        next_step = (p.get("hs_next_step") or "")[:60]
+    lines = ["hey team, today's tips & focus ⏱",
+             "",
+             "*⏱ Thursday — Stage Velocity Check*",
+             "Deals stuck in the same stage for 14+ days. Move them or close them.",
+             ""]
+
+    if not results:
+        lines += [
+            "✅ *No deals stuck for 14+ days — pipeline is moving!*",
+            "",
+            "💡 Keep the pace — update every deal you touch today. 🚀",
+        ]
+        return "\n".join(lines)
+
+    lines.append(f"*⚠️ {total_stuck} deals haven't moved in 14+ days:*")
+    for d in results[:7]:
+        p         = d["properties"]
+        days      = days_since(p.get("hs_lastmodifieddate"))
+        next_step = (p.get("hs_next_step") or "")[:55]
         lines.append(
             f"• *{p['dealname']}* — {fmt_eur(p.get('amount'))} — "
-            f"close: {fmt_date(p.get('closedate'))}"
+            f"{stage_name(p['dealstage'])}"
         )
         if next_step:
             lines.append(
-                f"  ↳ *{owner_name(p.get('hubspot_owner_id',''))}* · {next_step}"
+                f"  ↳ Stuck *{days} days* → "
+                f"*{owner_name(p.get('hubspot_owner_id',''))}* · {next_step}"
             )
         else:
             lines.append(
-                f"  ↳ *{owner_name(p.get('hubspot_owner_id',''))}* · "
-                "⚠️ no next step — define it today"
+                f"  ↳ Stuck *{days} days* → "
+                f"*{owner_name(p.get('hubspot_owner_id',''))}* · "
+                "⚠️ no next step defined"
             )
 
     lines.append("")
-    lines.append("💡 One more push before the week ends — make it count! 🚀")
+    lines.append(
+        f"💡 *{total_stuck} deals need a push.* "
+        "One action each: send a follow-up, book a next call, or mark as lost. 🎯"
+    )
     return "\n".join(lines)
 
 
 def pill_friday():
-    seven_days_ago = int(
-        (datetime.now(timezone.utc) - timedelta(days=7)).timestamp() * 1000
-    )
+    week_start = _week_start_ms()   # Monday 00:00 Rome — this week's wins only
     wins = hs_search(
         filters=[
             {"propertyName": "pipeline", "operator": "EQ", "value": PIPELINE_ID},
             {"propertyName": "dealstage", "operator": "EQ", "value": "986053469"},
             {"propertyName": "closedate", "operator": "GT",
-             "value": str(seven_days_ago)},
+             "value": str(week_start)},
         ],
         sorts=[{"propertyName": "amount", "direction": "DESCENDING"}],
         properties=["dealname", "amount", "closedate", "hubspot_owner_id", "createdate"],
@@ -641,55 +727,47 @@ def pill_friday():
     lines = ["hey team, today's tips & focus 🏆",
              "",
              "*🏆 Friday — Wins & Momentum*",
-             "Let's finish the week strong! Here's what we closed and what to push.",
              ""]
 
+    # — Closed wins: compact single line —
     wins_results = wins.get("results", [])
     if wins_results:
         total_won = sum(float(d["properties"].get("amount") or 0)
                         for d in wins_results)
-        lines.append(f"*🎉 Closed this week ({fmt_eur(total_won)} total):*")
-        for d in wins_results:
-            p = d["properties"]
-            lines.append(
-                f"• *{p['dealname']}* — {fmt_eur(p.get('amount'))} → "
-                f"*{owner_name(p.get('hubspot_owner_id',''))}* 🎉"
-            )
-    else:
-        lines.append(
-            "*🎯 No closes this week* — "
-            "let's push the deals in Negotiation!"
+        win_items = " ".join(
+            f"• {d['properties']['dealname']} — "
+            f"{fmt_eur(d['properties'].get('amount'))} → "
+            f"{owner_name(d['properties'].get('hubspot_owner_id', ''))} 🎉"
+            for d in wins_results
         )
+        lines.append(f"🎉 Closed this week ({fmt_eur(total_won)} total): {win_items}")
+    else:
+        lines.append("🎯 No closes this week — let's push the deals in Negotiation!")
 
+    # — Negotiation: compact single line — • first · second · third
     closing_results = closing.get("results", [])
     if closing_results:
-        lines.append("")
-        lines.append("*⚡ In Negotiation — push to close next week:*")
-        for d in closing_results:
-            p = d["properties"]
-            lines.append(
-                f"• *{p['dealname']}* — {fmt_eur(p.get('amount'))} — "
-                f"close: {fmt_date(p.get('closedate'))} → "
-                f"*{owner_name(p.get('hubspot_owner_id',''))}*"
-            )
+        neg_parts = [
+            f"{d['properties']['dealname']} "
+            f"{fmt_k(d['properties'].get('amount'))} "
+            f"→ {owner_name(d['properties'].get('hubspot_owner_id', ''))}"
+            for d in closing_results
+        ]
+        neg_items = "• " + " · ".join(neg_parts)
+        lines.append(f"⚡ In Negotiation — push to close next week: {neg_items}")
 
     # ─── 🏅 Rep Scorecard ─────────────────────────────────────────────────────
     lines.append("")
-    lines.append("━" * 32)
     lines.append("*🏅 Rep Scorecard*")
 
-    # — Section 1: Best Deal Closed —
-    lines.append("")
-    lines.append("*🥇 Best Deal of the Week*")
+    # — Best Deal: single compact line —
     if wins_results:
-        # Star = highest amount win (already sorted DESC)
         star = wins_results[0]
         sp = star["properties"]
         star_rep  = owner_name(sp.get("hubspot_owner_id", ""))
         star_name = sp.get("dealname", "—")
         star_amt  = float(sp.get("amount") or 0)
 
-        # Calculate close speed (createdate → closedate)
         close_days = None
         try:
             created_dt = datetime.fromisoformat(
@@ -702,37 +780,17 @@ def pill_friday():
         except Exception:
             pass
 
-        # Build dynamic "why" sentence
-        why_parts = []
-        avg_amt = (sum(float(d["properties"].get("amount") or 0)
-                       for d in wins_results[1:]) / (len(wins_results) - 1)
-                   if len(wins_results) > 1 else 0)
-        if len(wins_results) == 1 or (avg_amt > 0 and star_amt >= avg_amt * 1.5):
-            why_parts.append(f"biggest deal of the week — {fmt_eur(star_amt)}")
-        else:
-            why_parts.append(f"{fmt_eur(star_amt)} closed")
-        if close_days is not None:
-            why_parts.append(
-                f"closed in {close_days} day{'s' if close_days != 1 else ''}"
-                f" from first contact"
-            )
-
-        why_str = " · ".join(why_parts)
-        lines.append(f"*{star_rep}* — _{star_name}_")
+        days_str = f" · {close_days} days to close" if close_days is not None else ""
         lines.append(
-            f"💬 {why_str.capitalize()}. Outstanding! 👏"
+            f"🥇 Best Deal → {star_rep} · {star_name} · {fmt_k(star_amt)}{days_str} 👏"
         )
     else:
-        lines.append("_No closes this week — push those Negotiation deals!_")
+        lines.append("🥇 Best Deal → _No closes this week — push those Negotiation deals!_")
 
-    # — Section 2: Best Call / Video Call (Fathom + quality re-ranking) —
-    lines.append("")
+    # — Best Call / Video Call (Fathom) —
     candidates = fathom_best_call_this_week(top_n=1)
     lines.extend(fathom_rep_scorecard(candidates))
 
-    lines.append("━" * 32)
-
-    lines.append("")
     lines.append("Have a great weekend! Next week we close 🚀")
     return "\n".join(lines)
 
@@ -802,6 +860,7 @@ def main():
     else:
         result = send_to_gchat(message)
         print(f"✅ Sent! Message ID: {result.get('name', 'unknown')}")
+        log_to_obsidian(day_label, message)
 
 
 if __name__ == "__main__":
